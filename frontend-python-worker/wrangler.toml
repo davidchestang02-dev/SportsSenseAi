@@ -1,0 +1,9 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
+
+name = "sportssenseai-python-edge"
+main = "./src/entry.py"
+compatibility_date = "2026-04-09"
+compatibility_flags = ["python_workers"]
+
+[vars]
+SSA_API_BASE = "https://sportssenseai-api.david-chestang02.workers.dev"

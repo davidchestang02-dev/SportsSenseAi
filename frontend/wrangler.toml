@@ -1,0 +1,19 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
+
+name = "sportssenseai-web"
+compatibility_date = "2026-04-09"
+pages_build_output_dir = "./dist"
+
+[vars]
+SSA_API_BASE = "https://sportssenseai-api.david-chestang02.workers.dev"
+
+[[services]]
+binding = "SSA_API"
+service = "sportssenseai-api"
+
+[env.preview.vars]
+SSA_API_BASE = "https://sportssenseai-api-staging.david-chestang02.workers.dev"
+
+[[env.preview.services]]
+binding = "SSA_API"
+service = "sportssenseai-api-staging"

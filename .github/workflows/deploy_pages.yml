@@ -1,20 +1,31 @@
-name: Deploy Web
+name: Deploy Cloudflare Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "web/**"
+      - "frontend/**"
+      - ".github/workflows/deploy_pages.yml"
 
 jobs:
-  deploy:
+  deploy-pages:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
-      - name: Install web dependencies
-        run: pip install -r web/requirements.txt
-      - name: Package web app
-        run: echo "Streamlit app ready for Cloudflare Pages / alternative deployment."
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build Cloudflare Pages app
+        run: npm run build
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.SSA_CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 71c315a0acd5896e9ca591df7d3e188b
+        run: npx wrangler pages deploy dist --project-name sportssenseai-web

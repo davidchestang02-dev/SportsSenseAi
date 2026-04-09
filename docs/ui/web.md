@@ -1,12 +1,44 @@
 # Web UI
 
-Run the main web app with:
+The production customer-facing web experience now lives in `frontend/` as a Cloudflare Pages app.
+
+Run the public Pages frontend locally with:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Build it for Pages with:
+
+```powershell
+cd frontend
+npm run build
+```
+
+Public sections in the new app:
+
+- Hero slate summary
+- Slate Outlook
+- Market Board
+- Risk Engine
+- AI Copilot
+- Platform Status
+
+Cloudflare-specific pieces:
+
+- `frontend/functions/api/[[path]].js` proxies `/api/*` traffic to the Workers backend.
+- `frontend/public/_routes.json` ensures only `/api/*` requests invoke Pages Functions.
+- `frontend/wrangler.toml` is the Pages config for service bindings and preview routing.
+
+Legacy Streamlit fallback:
 
 ```powershell
 streamlit run web/Home.py
 ```
 
-Key pages:
+Legacy Streamlit pages:
 
 - Lineups
 - Weather
@@ -23,6 +55,4 @@ Key pages:
 - Auto Bet
 - Admin Console
 
-The UI uses a teal/amber glass theme and can run fully on local fallback data if the backend is unavailable.
-
-`web/Dockerfile` is included for container-based deployment because Streamlit is not a direct Cloudflare Pages runtime target.
+The Streamlit app remains useful for internal reference while the Cloudflare frontend reaches parity.
