@@ -17,18 +17,27 @@ cd frontend
 npm run build
 ```
 
-Public sections in the new app:
+Public routes in the new app:
 
-- Hero slate summary
-- Slate Outlook
-- Market Board
-- Risk Engine
-- AI Copilot
-- Platform Status
+- `/` landing page
+- `/command-center`
+- `/players`
+- `/games`
+- `/markets`
+- `/lineups`
+
+The public experience now includes:
+
+- Dedicated landing page
+- Routed multi-page navigation
+- Player portraits and team marks
+- Line and bar charts for projections and calibration
+- Matchup rooms, edge board, and lineup surfaces
 
 Cloudflare-specific pieces:
 
 - `frontend/functions/api/[[path]].js` proxies `/api/*` traffic to the Workers backend.
+- `frontend/public/_redirects` enables SPA route fallback for browser navigation.
 - `frontend/public/_routes.json` ensures only `/api/*` requests invoke Pages Functions.
 - `frontend/wrangler.toml` is the Pages config for service bindings and preview routing.
 
