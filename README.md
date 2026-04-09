@@ -70,7 +70,7 @@ python -m pytest tests
 2. Set secrets from [`backend/.dev.vars.example`](backend/.dev.vars.example), especially `SSA_CF_AIG_TOKEN` or `CF_AIG_TOKEN` for the Cloudflare AI Gateway-backed `/mlb/qa` route.
 3. Apply the D1 schema in [`backend/schema/d1_schema.sql`](backend/schema/d1_schema.sql).
 4. Set `SSA_API_BASE` / `EXPO_PUBLIC_SSA_API_BASE` for deployed frontend and mobile clients.
-5. Add GitHub secrets required by the workflows in [`.github/workflows`](.github/workflows).
+5. Add GitHub secrets required by the workflows in [`.github/workflows`](.github/workflows), especially `SSA_CF_API_TOKEN` for Cloudflare deploy automation.
 6. Deploy Workers with `npx wrangler deploy --env staging` and `npx wrangler deploy --env production`, then deploy web/admin and mobile.
 
 Notes:

@@ -34,6 +34,7 @@ Known external dependencies that still require real credentials:
 - Cloudflare AI Gateway token for live AI Q&A
 - Stripe keys if billing should be active on day one
 - Expo token if OTA automation should run from GitHub
+- GitHub Actions secret `SSA_CF_API_TOKEN` for automated Workers and D1 deploys
 
 AI Q&A route:
 
