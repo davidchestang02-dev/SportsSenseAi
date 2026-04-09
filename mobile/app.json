@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "SportsSenseAi",
+    "slug": "sportssenseai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#07141f"
+      }
+    },
+    "extra": {
+      "apiBase": "https://sportssenseai-api.david-chestang02.workers.dev"
+    }
+  }
+}

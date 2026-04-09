@@ -1,0 +1,90 @@
+name = "sportssenseai-api"
+account_id = "71c315a0acd5896e9ca591df7d3e188b"
+main = "workers/router/src/index.ts"
+compatibility_date = "2026-04-08"
+minify = true
+
+[ai]
+binding = "AI"
+
+[vars]
+OPENAI_MODEL = "openai/gpt-4.1"
+SSA_APP_NAME = "SportsSenseAi"
+SSA_ALLOWED_ORIGINS = "http://localhost:8501,http://localhost:8081"
+SSA_BILLING_BYPASS = "true"
+SSA_CF_AIG_BYOK_ALIAS = ""
+SSA_DEFAULT_BANKROLL = "1000"
+SSA_DEFAULT_REGION = "us"
+SSA_FEATURE_MOCK_MODE = "true"
+
+# Replace these placeholder identifiers before deploying.
+[[d1_databases]]
+binding = "DB"
+database_name = "sportssenseai-mlb"
+database_id = "27e39c7f-1664-4804-b3ca-10a62b0e716c"
+
+[[kv_namespaces]]
+binding = "SSA_CACHE"
+id = "4d073fa701554a0f869bdf4328afba4f"
+
+[[r2_buckets]]
+binding = "MLB_BUCKET"
+bucket_name = "sportssenseai-mlb-bucket"
+
+[env.staging]
+name = "sportssenseai-api-staging"
+
+[env.staging.ai]
+binding = "AI"
+
+[env.staging.vars]
+OPENAI_MODEL = "openai/gpt-4.1"
+SSA_APP_NAME = "SportsSenseAi"
+SSA_ALLOWED_ORIGINS = "http://localhost:8501,http://localhost:8081"
+SSA_BILLING_BYPASS = "true"
+SSA_CF_AIG_BYOK_ALIAS = ""
+SSA_DEFAULT_BANKROLL = "1000"
+SSA_DEFAULT_REGION = "us"
+SSA_FEATURE_MOCK_MODE = "true"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "sportssenseai-mlb"
+database_id = "27e39c7f-1664-4804-b3ca-10a62b0e716c"
+
+[[env.staging.kv_namespaces]]
+binding = "SSA_CACHE"
+id = "4d073fa701554a0f869bdf4328afba4f"
+
+[[env.staging.r2_buckets]]
+binding = "MLB_BUCKET"
+bucket_name = "sportssenseai-mlb-bucket"
+
+[env.production]
+name = "sportssenseai-api"
+
+[env.production.ai]
+binding = "AI"
+
+[env.production.vars]
+OPENAI_MODEL = "openai/gpt-4.1"
+SSA_APP_NAME = "SportsSenseAi"
+SSA_ALLOWED_ORIGINS = "http://localhost:8501,http://localhost:8081"
+SSA_BILLING_BYPASS = "true"
+SSA_CF_AIG_BYOK_ALIAS = ""
+SSA_DEFAULT_BANKROLL = "1000"
+SSA_DEFAULT_REGION = "us"
+SSA_FEATURE_MOCK_MODE = "true"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "sportssenseai-mlb"
+database_id = "27e39c7f-1664-4804-b3ca-10a62b0e716c"
+
+[[env.production.kv_namespaces]]
+binding = "SSA_CACHE"
+id = "4d073fa701554a0f869bdf4328afba4f"
+
+[[env.production.r2_buckets]]
+binding = "MLB_BUCKET"
+bucket_name = "sportssenseai-mlb-bucket"

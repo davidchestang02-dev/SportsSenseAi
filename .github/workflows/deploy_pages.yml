@@ -1,0 +1,20 @@
+name: Deploy Web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install web dependencies
+        run: pip install -r web/requirements.txt
+      - name: Package web app
+        run: echo "Streamlit app ready for Cloudflare Pages / alternative deployment."

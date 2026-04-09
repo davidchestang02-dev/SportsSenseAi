@@ -1,0 +1,21 @@
+name: Deploy Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install mobile dependencies
+        run: npm install
+        working-directory: mobile
+      - name: Expo OTA Placeholder
+        run: echo "Configure EXPO_TOKEN and replace this step with eas update --auto."

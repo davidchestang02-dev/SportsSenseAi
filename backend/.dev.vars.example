@@ -1,0 +1,13 @@
+# Secrets pushed with `wrangler secret put`
+AUTH_SECRET=replace-me
+SSA_CF_AIG_TOKEN=
+CF_AIG_TOKEN=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+# Plain config vars kept in wrangler.toml / env vars, not Cloudflare secrets
+OPENAI_MODEL=openai/gpt-4.1
+SSA_FEATURE_MOCK_MODE=true
+SSA_ALLOWED_ORIGINS=http://localhost:8501,http://localhost:8081
+SSA_BILLING_BYPASS=true
+SSA_CF_AIG_BYOK_ALIAS=
