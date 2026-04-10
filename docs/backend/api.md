@@ -35,8 +35,12 @@ Live-ops cadence:
 - Production now has an active `*/1 * * * *` Cloudflare cron for the live-sync code path.
 - Staging intentionally has no cron attached so it does not consume account schedule capacity.
 - The internal `GET /admin/mlb/live-sync` route remains available for manual verification and forced refreshes.
-- The app uses faster request-time polling for active games: schedule every 30 seconds and live summary snapshots every 15 seconds.
-- ESPN-style sub-minute play-by-play targets remain the next step and are documented separately from the currently implemented cadence.
+- Minute-level cron work is gated to baseball ops windows instead of running expensive scoreboard syncs all day.
+- Pregame board setup runs at `11:00 ET`, then a prelock validation pass runs `60` minutes before first pitch.
+- In-progress games sync on the minute, and recently completed tracked games get a `2` minute closeout window so users see finals quickly.
+- A final overnight archive sweep runs at `03:00 ET` for machine-learning and historical workflows.
+- The app mirrors that profile when open: active game schedule and live views refresh every `60` seconds, scheduled slates refresh hourly until prelock, and recent finals refresh every `2` minutes.
+- ESPN-style sub-minute play-by-play remains a future dedicated live-feed worker rather than part of the current cron path.
 
 Most modeling routes still fall back to in-repo mock data if D1 is unavailable or empty, which keeps the app launchable while infrastructure is being wired. The ESPN scoreboard routes are external and do not use the in-repo mock slate.
 

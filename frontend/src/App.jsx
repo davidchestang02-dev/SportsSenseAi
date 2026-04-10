@@ -14,13 +14,13 @@ const LivePage = lazy(() => import("./pages").then((module) => ({ default: modul
 const LineupsPage = lazy(() => import("./pages").then((module) => ({ default: module.LineupsPage })));
 
 const navItems = [
-  { to: "/", label: "Landing", end: true },
-  { to: "/command-center", label: "Command Center" },
+  { to: "/", label: "Home", end: true },
+  { to: "/command-center", label: "Command" },
   { to: "/teams", label: "Teams" },
-  { to: "/games", label: "Matchups" },
+  { to: "/games", label: "Games" },
   { to: "/players", label: "Players" },
   { to: "/markets", label: "Markets" },
-  { to: "/live", label: "Live" },
+  { to: "/live", label: "Live Ops" },
   { to: "/lineups", label: "Lineups" }
 ];
 
@@ -29,11 +29,11 @@ function SiteHeader({ selectedDate, setSelectedDate, health }) {
     <header className="site-header">
       <div className="site-header-row">
         <div className="brand-unit">
-          <img className="brand-unit-logo" src="/brand/growth-connectivity-icon.png" alt="SportsSense AI icon" />
+          <img className="brand-unit-logo" src="/favicon.svg" alt="SportsSense AI mark" />
           <div className="brand-unit-copy">
             <span className="brand-kicker">SportsSense AI</span>
-            <strong>Real-time MLB intelligence platform</strong>
-            <p>AI, analytics, matchup research, and edge discovery in one premium MLB decision platform.</p>
+            <strong>MLB operations console</strong>
+            <p>Deterministic modeling, stats layers, live pricing, and matchup research in one accessible command surface.</p>
           </div>
         </div>
 
@@ -72,10 +72,10 @@ function SiteHeader({ selectedDate, setSelectedDate, health }) {
         </nav>
 
         <div className="site-footprint">
-          <span>Live slate intelligence</span>
-          <span>Matchup research</span>
-          <span>Market signals</span>
-          <span>AI analysis</span>
+          <span>Deterministic layer</span>
+          <span>Stats layer</span>
+          <span>Live market ops</span>
+          <span>Research rooms</span>
         </div>
       </div>
     </header>
@@ -110,13 +110,13 @@ export default function App() {
 
       <footer className="site-footer">
         <div className="site-footer-brand">
-          <img src="/brand/sportssense-circuit-logo.png" alt="SportsSense AI circuit logo" />
+          <img src="/favicon.svg" alt="SportsSense AI mark" />
           <div>
             <strong>SportsSense AI</strong>
-            <span>We don't just show data. We help you understand it and act on it.</span>
+            <span>Accessible MLB research, pricing oversight, and live-sync operations.</span>
           </div>
         </div>
-        <span>Live MLB research, modeling, and decision support running now.</span>
+        <span>Built to preserve the modeling stack while improving the daily operating surface.</span>
       </footer>
     </div>
   );

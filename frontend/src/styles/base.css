@@ -1,0 +1,107 @@
+@import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap");
+
+:root {
+  color-scheme: light;
+  --ssa-blue-dark: #002244;
+  --ssa-blue-action: #004a99;
+  --ssa-blue-soft: #d9e7f6;
+  --ssa-gray-light: #f0f0f0;
+  --ssa-gray-panel: #f7f9fc;
+  --ssa-gray-border: #cbd5e1;
+  --ssa-gray-strong: #7a8ba3;
+  --ssa-red: #cd2026;
+  --ssa-green: #1f6b43;
+  --ssa-gold: #8a4b00;
+  --white: #ffffff;
+  --text-main: #1b1b1b;
+  --text-muted: #4b5563;
+  --text-soft: #6b7280;
+  --shadow-sm: 0 8px 24px rgba(0, 34, 68, 0.08);
+  --shadow-md: 0 18px 40px rgba(0, 34, 68, 0.12);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --content-max: 1280px;
+  --transition: 160ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--text-main);
+  font-family: "Public Sans", "Segoe UI", sans-serif;
+  line-height: 1.5;
+  background:
+    radial-gradient(circle at top right, rgba(0, 74, 153, 0.12), transparent 26rem),
+    linear-gradient(180deg, #f9fbfd 0%, #eff3f7 56%, #e5ebf3 100%);
+}
+
+a {
+  color: var(--ssa-blue-action);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.recharts-cartesian-axis-tick-value,
+.recharts-legend-item-text {
+  fill: var(--text-muted);
+  font-size: 12px;
+}
+
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--white) !important;
+  border: 1px solid var(--ssa-gray-border) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+@keyframes sectionRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes statusPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}

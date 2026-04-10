@@ -66,8 +66,8 @@ function getRefreshCadence(schedule, selectedDate) {
   if (games.some((game) => game.status === "IN_PROGRESS")) {
     return {
       mode: "live",
-      scheduleMs: 30000,
-      liveMs: 15000
+      scheduleMs: 60000,
+      liveMs: 60000
     };
   }
 
@@ -75,7 +75,7 @@ function getRefreshCadence(schedule, selectedDate) {
     games.some((game) => game.status === "SCHEDULED" && minutesUntilStart(game.startTime) !== null && minutesUntilStart(game.startTime) <= 60)
   ) {
     return {
-      mode: "pregame_hot",
+      mode: "pregame_prelock",
       scheduleMs: 60000,
       liveMs: null
     };
@@ -83,16 +83,16 @@ function getRefreshCadence(schedule, selectedDate) {
 
   if (games.some((game) => game.status === "SCHEDULED")) {
     return {
-      mode: "pregame_warm",
-      scheduleMs: 300000,
+      mode: "pregame_daily",
+      scheduleMs: 3600000,
       liveMs: null
     };
   }
 
   if (games.some((game) => game.status === "FINAL")) {
     return {
-      mode: "final",
-      scheduleMs: 900000,
+      mode: "recent_final",
+      scheduleMs: 120000,
       liveMs: null
     };
   }

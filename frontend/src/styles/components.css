@@ -1,0 +1,506 @@
+.site-header {
+  background: linear-gradient(135deg, var(--ssa-blue-dark), #123b69);
+  color: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 4px solid var(--ssa-blue-action);
+  box-shadow: var(--shadow-md);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 1rem 1.25rem 1.2rem;
+}
+
+.site-footer {
+  background: linear-gradient(135deg, var(--ssa-blue-dark), #0b2d4d);
+  color: var(--white);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 1rem 1.25rem;
+}
+
+.site-footer a,
+.site-footer span,
+.site-footer-brand span,
+.site-footprint {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.brand-kicker,
+.section-eyebrow,
+.mini-label,
+.metric-label,
+.detail-label,
+.card-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.site-header .brand-kicker,
+.site-header .section-eyebrow,
+.site-header .mini-label {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.brand-unit-copy strong,
+.landing-copy h1,
+.research-hero h2,
+.page-card-head h2,
+.player-research-summary h3,
+.topbar h1 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.brand-unit-copy strong,
+.page-card-head h2,
+.research-hero h2 {
+  color: inherit;
+}
+
+.brand-unit-copy p,
+.page-card-head p,
+.story-card p,
+.detail-card p,
+.platform-card p,
+.landing-copy p,
+.research-hero p,
+.site-footer-brand span {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.site-header .brand-unit-copy p {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.brand-unit-logo,
+.site-footer-brand img {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--white);
+  padding: 0.4rem;
+  box-shadow: inset 0 0 0 1px rgba(0, 34, 68, 0.08);
+}
+
+.site-footer-brand img {
+  width: 56px;
+  height: 56px;
+}
+
+.nav-link,
+.primary-button,
+.secondary-button,
+.ghost-button,
+.team-toggle,
+.status-pill,
+.team-pill,
+.source-pill,
+.status-flag {
+  border-radius: var(--radius-sm);
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0.7rem 0.95rem;
+  color: rgba(255, 255, 255, 0.84);
+  border: 1px solid transparent;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.nav-link:hover,
+.nav-link.is-active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--white);
+  text-decoration: none;
+}
+
+.field-inline,
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 14rem;
+}
+
+.field-inline span,
+.field-stack span {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.field-inline input,
+.field-inline select,
+.field-stack input,
+.field-stack select,
+.field-stack textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--ssa-gray-border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--text-main);
+}
+
+.field-stack textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  padding: 0.7rem 0.95rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--white);
+}
+
+.status-pill.is-live {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.status-pill.is-warn {
+  background: rgba(205, 32, 38, 0.18);
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: statusPulse 1.6s ease-in-out infinite;
+}
+
+.warning-banner {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--ssa-red);
+  background: rgba(205, 32, 38, 0.08);
+  color: #7a1a1e;
+}
+
+.page-panel,
+.metric-card,
+.story-card,
+.detail-card,
+.platform-card,
+.split-card,
+.roster-card,
+.matchup-tile,
+.player-research-header,
+.hero-stat,
+.landing-summary-card,
+.lineup-card,
+.injury-card,
+.game-card,
+.player-card,
+.slip-card {
+  background: var(--white);
+  border: 1px solid var(--ssa-gray-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.page-panel,
+.player-research-header,
+.landing-summary-card {
+  padding: 1.15rem;
+}
+
+.metric-card,
+.story-card,
+.detail-card,
+.platform-card,
+.split-card,
+.roster-card,
+.matchup-tile,
+.hero-stat,
+.lineup-card,
+.injury-card,
+.game-card,
+.player-card,
+.slip-card {
+  padding: 1rem;
+}
+
+.page-card-head h2 {
+  font-size: 1.35rem;
+}
+
+.metric-value,
+.detail-card-value {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: 1.4rem;
+  line-height: 1.15;
+}
+
+.detail-card strong,
+.story-card strong,
+.platform-card strong,
+.split-card strong,
+.hero-stat strong,
+.landing-summary-card strong {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.metric-note {
+  display: block;
+  margin-top: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0.8rem 1.2rem;
+  border: 1px solid transparent;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition), background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.primary-button {
+  background: var(--ssa-blue-action);
+  color: var(--white);
+}
+
+.primary-button:hover {
+  background: var(--ssa-blue-dark);
+  text-decoration: none;
+}
+
+.secondary-button {
+  background: var(--white);
+  color: var(--ssa-blue-action);
+  border-color: var(--ssa-blue-action);
+}
+
+.secondary-button:hover,
+.ghost-button:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.ghost-button {
+  background: var(--ssa-gray-panel);
+  color: var(--text-main);
+  border-color: var(--ssa-gray-border);
+}
+
+.portrait {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--ssa-blue-soft), #eef3f8);
+  border: 1px solid var(--ssa-gray-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--ssa-blue-dark);
+}
+
+.portrait img,
+.team-logo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-pill {
+  min-width: 0;
+  padding: 0.3rem 0.75rem 0.3rem 0.3rem;
+  background: var(--ssa-gray-panel);
+  border: 1px solid var(--ssa-gray-border);
+}
+
+.team-pill.compact {
+  padding-right: 0.3rem;
+}
+
+.team-logo-frame {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+  font-weight: 800;
+}
+
+.stat-chip,
+.info-pair,
+.market-row,
+.lineup-row,
+.slip-row,
+.injury-row,
+.table-row {
+  background: var(--ssa-gray-panel);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+}
+
+.stat-chip,
+.source-pill,
+.status-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.stat-chip {
+  color: var(--ssa-blue-dark);
+}
+
+.info-pair {
+  padding: 0.8rem 0.85rem;
+  border-radius: var(--radius-sm);
+}
+
+.info-pair span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.table-row,
+.market-row,
+.lineup-row,
+.slip-row,
+.injury-row {
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--radius-sm);
+}
+
+.table-row--header {
+  background: var(--ssa-blue-soft);
+  color: var(--ssa-blue-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.table-row--matchups {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
+.table-row.is-active,
+.table-row--matchups.is-active,
+.matchup-tile.is-active {
+  border-color: var(--ssa-blue-action);
+  box-shadow: 0 0 0 1px rgba(0, 74, 153, 0.16), var(--shadow-sm);
+}
+
+.source-pill {
+  border: 1px solid var(--ssa-gray-border);
+  background: var(--white);
+}
+
+.source-pill--verified {
+  color: var(--ssa-green);
+  border-color: rgba(31, 107, 67, 0.24);
+  background: rgba(31, 107, 67, 0.08);
+}
+
+.source-pill--partial {
+  color: var(--ssa-gold);
+  border-color: rgba(138, 75, 0, 0.22);
+  background: rgba(138, 75, 0, 0.08);
+}
+
+.source-pill--blocked,
+.source-pill--unknown {
+  color: var(--ssa-red);
+  border-color: rgba(205, 32, 38, 0.22);
+  background: rgba(205, 32, 38, 0.08);
+}
+
+.status-flag--prime,
+.status-flag--in_progress {
+  color: var(--ssa-green);
+  background: rgba(31, 107, 67, 0.08);
+}
+
+.status-flag--playable,
+.status-flag--final {
+  color: var(--ssa-blue-dark);
+  background: rgba(0, 74, 153, 0.1);
+}
+
+.status-flag--watch,
+.status-flag--scheduled {
+  color: var(--ssa-gold);
+  background: rgba(138, 75, 0, 0.1);
+}
+
+.status-flag--unknown {
+  color: var(--text-muted);
+  background: rgba(122, 139, 163, 0.14);
+}
+
+.positive-text {
+  color: var(--ssa-blue-action);
+  font-weight: 700;
+}
+
+.spot-text,
+.lineup-status {
+  color: var(--ssa-red);
+  font-weight: 700;
+}
+
+.lineup-order {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: var(--ssa-blue-soft);
+  color: var(--ssa-blue-dark);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.empty-state {
+  padding: 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--ssa-gray-border);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-muted);
+}
+
+.utility-link {
+  color: var(--ssa-blue-action);
+  font-weight: 700;
+}

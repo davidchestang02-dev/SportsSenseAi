@@ -1,0 +1,281 @@
+.site-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.site-header,
+.site-main,
+.site-footer {
+  width: min(var(--content-max), calc(100% - 2rem));
+  margin: 0 auto;
+}
+
+.site-header {
+  margin-top: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.site-main {
+  flex: 1;
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+}
+
+.site-header-row,
+.site-nav-row,
+.site-tools,
+.site-footer,
+.topbar,
+.page-card-head,
+.market-row,
+.lineup-row,
+.slip-row,
+.injury-row,
+.game-card-top,
+.player-card-head,
+.player-research-summary,
+.selector-bar,
+.team-showcase,
+.matchup-tile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.site-header-row,
+.site-nav-row,
+.site-tools,
+.selector-bar {
+  flex-wrap: wrap;
+}
+
+.site-nav,
+.site-footprint,
+.site-footer-brand,
+.brand-unit,
+.team-pill-row,
+.player-summary,
+.lineup-row-meta,
+.market-row-meta,
+.slip-meta,
+.chip-stack {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.site-nav,
+.site-footprint,
+.chip-stack {
+  flex-wrap: wrap;
+}
+
+.page-shell,
+.metric-grid,
+.cards-grid,
+.two-column,
+.detail-grid,
+.lineup-grid,
+.slips-grid,
+.list-stack,
+.story-strip,
+.platform-grid,
+.hero-stat-grid,
+.split-grid,
+.roster-grid,
+.matchup-selector-grid,
+.landing-visual,
+.stack-block,
+.landing-summary-grid,
+.landing-cadence-list,
+.table-shell,
+.table-shell--dense,
+.signal-rail,
+.split-stat-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-shell {
+  gap: 1.15rem;
+  animation: sectionRise 220ms ease;
+}
+
+.landing-hero,
+.page-hero,
+.metric-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.landing-hero {
+  grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 0.95fr);
+  align-items: start;
+}
+
+.page-hero,
+.two-column,
+.lineup-grid,
+.team-showcase {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cards-grid,
+.detail-grid,
+.slips-grid,
+.story-strip,
+.platform-grid,
+.roster-grid,
+.matchup-selector-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hero-stat-grid,
+.split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.split-stat-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.roster-grid--dense {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.table-row--market {
+  grid-template-columns: 1.15fr 1.2fr 0.8fr 0.65fr 0.65fr 0.65fr 0.8fr 0.9fr 0.8fr;
+}
+
+.table-row--risk {
+  grid-template-columns: 1.2fr 1fr 0.7fr 0.7fr 0.8fr 0.8fr;
+}
+
+.table-row--autobet {
+  grid-template-columns: 0.95fr 1.2fr 1fr 0.65fr 0.7fr 0.7fr 0.65fr;
+}
+
+.table-row--matchups {
+  grid-template-columns: 1.1fr 0.9fr 1fr 1.35fr 0.7fr 0.7fr;
+}
+
+.table-row--recent {
+  grid-template-columns: 0.8fr 0.8fr 0.6fr 1.6fr;
+}
+
+.table-row--live {
+  grid-template-columns: 0.7fr 0.7fr 0.8fr 0.8fr 0.7fr 1fr 0.6fr;
+}
+
+.table-row--game-odds {
+  grid-template-columns: 1.05fr 0.8fr 1.2fr 1.15fr 1fr 0.75fr;
+}
+
+.table-row--movement {
+  grid-template-columns: 1.05fr 1fr 0.8fr 0.9fr 0.7fr;
+}
+
+.chart-shell {
+  width: 100%;
+  height: 320px;
+}
+
+@media (max-width: 1240px) {
+  .metric-grid,
+  .cards-grid,
+  .detail-grid,
+  .slips-grid,
+  .story-strip,
+  .platform-grid,
+  .roster-grid,
+  .matchup-selector-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .landing-hero,
+  .page-hero,
+  .two-column,
+  .lineup-grid,
+  .team-showcase {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-header,
+  .site-main,
+  .site-footer {
+    width: min(var(--content-max), calc(100% - 1rem));
+  }
+
+  .site-header-row,
+  .site-nav-row,
+  .site-tools,
+  .site-footer,
+  .topbar,
+  .page-card-head,
+  .market-row,
+  .lineup-row,
+  .slip-row,
+  .injury-row,
+  .game-card-top,
+  .player-card-head,
+  .player-research-summary,
+  .selector-bar,
+  .team-showcase,
+  .matchup-tile-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .metric-grid,
+  .cards-grid,
+  .detail-grid,
+  .slips-grid,
+  .story-strip,
+  .platform-grid,
+  .hero-stat-grid,
+  .split-grid,
+  .roster-grid,
+  .roster-grid--dense,
+  .matchup-selector-grid,
+  .split-stat-grid,
+  .landing-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-row,
+  .table-row--market,
+  .table-row--risk,
+  .table-row--autobet,
+  .table-row--matchups,
+  .table-row--recent,
+  .table-row--live,
+  .table-row--game-odds,
+  .table-row--movement {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-shell {
+    height: 280px;
+  }
+}

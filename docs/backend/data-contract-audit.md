@@ -70,7 +70,10 @@ These routes use D1 when rows exist, but they still fall back to mock output whe
 - Production now has an active `*/1 * * * *` Cloudflare cron for the live-sync code path.
 - Staging intentionally runs without a cron so production keeps the account schedule slot.
 - `GET /admin/mlb/live-sync` remains the manual verification and force-refresh route, and it was verified against the live Rockies-Padres game `401814875` on April 9, 2026.
-- Current app cadence for live betting surfaces is 15 seconds for `/live/mlb?refresh=1` and 30 seconds for `/schedule/mlb`.
+- Expensive scoreboard sync work only runs during baseball ops windows instead of every minute all day.
+- Daily pregame board setup runs at `11:00 ET`, with a second validation pass `60` minutes before first pitch.
+- Live games sync every minute, recently tracked finals stay hot for `2` minutes after completion, and the overnight ML archive sweep runs at `03:00 ET`.
+- The app reflects that cadence while open with `60` second live refreshes, hourly scheduled-board refreshes until prelock, and `2` minute recent-final refreshes.
 - ESPN-style 5-second play-by-play polling remains a target profile for a future dedicated live feed worker.
 
 ## Verification Checklist

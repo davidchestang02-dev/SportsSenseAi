@@ -54,38 +54,40 @@ export const MLB_LIVE_SYNC_PROFILE = {
   implemented_now: {
     manual_route: "/admin/mlb/live-sync",
     app: {
-      live_schedule_refresh_ms: 30000,
-      live_snapshot_refresh_ms: 15000,
-      pregame_hot_schedule_refresh_ms: 60000,
-      pregame_warm_schedule_refresh_ms: 300000,
-      final_schedule_refresh_ms: 900000
+      live_schedule_refresh_ms: 60000,
+      live_snapshot_refresh_ms: 60000,
+      recent_final_refresh_ms: 120000,
+      pregame_daily_sync_at_et: "11:00",
+      pregame_prelock_sync_minutes_before_start: 60,
+      final_archive_sync_at_et: "03:00"
     }
   },
   configured_cron_target: {
     expression: "*/1 * * * *",
     status: "active_in_production",
-    note: "Production cron is attached and drives the minute-level live-sync cadence. Staging intentionally runs without a cron."
+    note:
+      "Production cron is attached on one-minute granularity, but the expensive scoreboard sync only runs during baseball ops windows. Staging intentionally runs without a cron."
   },
   server_phase_rules: {
     live: {
       sync_every_minutes: 1,
-      scope: "Persist scoreboard odds and refresh mlb_live summary snapshots."
+      scope: "Persist scoreboard odds and refresh mlb_live summary snapshots for in-progress games."
     },
-    pregame_hot: {
-      sync_every_minutes: 5,
-      scope: "Games starting within 60 minutes."
+    pregame_daily: {
+      sync_at_et: "11:00",
+      scope: "Daily pregame scoreboard refresh for the upcoming board."
     },
-    pregame_warm: {
-      sync_every_minutes: 15,
-      scope: "Games starting later today or later in the board window."
+    pregame_prelock: {
+      sync_at_relative_minutes: 60,
+      scope: "One-hour-to-first-pitch validation pass for scheduled matchups."
     },
     recent_final: {
-      sync_every_minutes: 30,
-      scope: "Recently completed games kept warm for late corrections and closeout odds history."
+      sync_window_minutes: 2,
+      scope: "Immediate postgame capture for matchups that were actively tracked live."
     },
-    final_cold: {
-      sync_every_minutes: null,
-      scope: "No routine sync after the recent final window."
+    final_archive: {
+      sync_at_et: "03:00",
+      scope: "Overnight final-state sweep for machine-learning and archival workflows."
     }
   },
   target_profile: {

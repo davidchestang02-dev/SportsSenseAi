@@ -14,7 +14,20 @@ import { handleScheduleRequest, syncMlbScoreboardOdds } from "../../mlb-schedule
 import { handleSimRequest } from "../../mlb-sim/src/index";
 import { handleOptions, json, notFound, parseDate, withError } from "../../shared/utils";
 
-type SyncPhase = "live" | "pregame_hot" | "pregame_warm" | "recent_final" | "final_cold";
+type SyncPhase = "live" | "pregame_daily" | "pregame_prelock" | "recent_final" | "final_archive" | "idle";
+
+type SyncPhasePlan = {
+  gameId: string;
+  phase: SyncPhase;
+  should_sync: boolean;
+  status: string;
+  summary: string | null;
+  startTime: string | null;
+  teams: {
+    away: string;
+    home: string;
+  };
+};
 
 function isBillingBypassed(env: Env): boolean {
   return (env.SSA_BILLING_BYPASS || "").toLowerCase() === "true";
@@ -33,11 +46,73 @@ function minutesUntil(now: Date, value: string | null | undefined): number | nul
   return (parsed.getTime() - now.getTime()) / (60 * 1000);
 }
 
-function classifySyncPhase(
+function getEasternClock(now: Date) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  const values = formatter
+    .formatToParts(now)
+    .reduce<Record<string, string>>((accumulator, part) => {
+      if (part.type !== "literal") {
+        accumulator[part.type] = part.value;
+      }
+      return accumulator;
+    }, {});
+
+  return {
+    year: Number(values.year || 0),
+    month: Number(values.month || 0),
+    day: Number(values.day || 0),
+    hour: Number(values.hour || 0),
+    minute: Number(values.minute || 0)
+  };
+}
+
+function getEasternDate(now: Date): string {
+  const eastern = getEasternClock(now);
+  return `${String(eastern.year).padStart(4, "0")}-${String(eastern.month).padStart(2, "0")}-${String(eastern.day).padStart(2, "0")}`;
+}
+
+function getScheduledSportsDate(now: Date): string {
+  const eastern = getEasternClock(now);
+  if (eastern.hour < 3 || isFinalArchiveWindow(now)) {
+    return getEasternDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  }
+
+  return getEasternDate(now);
+}
+
+function isMorningPregameRefresh(now: Date): boolean {
+  const eastern = getEasternClock(now);
+  return eastern.hour === 11 && eastern.minute < 2;
+}
+
+function isFinalArchiveWindow(now: Date): boolean {
+  const eastern = getEasternClock(now);
+  return eastern.hour === 3 && eastern.minute < 2;
+}
+
+function isMinuteOpsWindow(now: Date): boolean {
+  const eastern = getEasternClock(now);
+  return eastern.hour >= 12 || eastern.hour <= 2;
+}
+
+function isPregamePrelock(minutesToStart: number | null): boolean {
+  return minutesToStart !== null && minutesToStart <= 60.5 && minutesToStart > 58;
+}
+
+function classifyPersistencePhase(
   game: {
-  status: string;
-  startTime: string | null;
-},
+    status: string;
+    startTime: string | null;
+  },
   now: Date
 ): SyncPhase {
   const minutesToStart = minutesUntil(now, game.startTime);
@@ -47,38 +122,95 @@ function classifySyncPhase(
   }
 
   if (game.status === "SCHEDULED") {
-    if (minutesToStart !== null && minutesToStart <= 60) {
-      return "pregame_hot";
+    if (isMorningPregameRefresh(now)) {
+      return "pregame_daily";
     }
-    return "pregame_warm";
+
+    if (isPregamePrelock(minutesToStart)) {
+      return "pregame_prelock";
+    }
+
+    return "idle";
   }
 
-  if (game.status === "FINAL") {
-    if (minutesToStart !== null && minutesToStart >= -360) {
-      return "recent_final";
-    }
-    return "final_cold";
+  if (game.status === "FINAL" && isFinalArchiveWindow(now)) {
+    return "final_archive";
   }
 
-  return "final_cold";
+  return "idle";
 }
 
-function shouldSyncPhase(phase: SyncPhase, now: Date): boolean {
-  const minute = now.getUTCMinutes();
+function shouldSyncPhase(phase: SyncPhase): boolean {
+  return phase !== "idle";
+}
 
-  switch (phase) {
-    case "live":
-      return true;
-    case "pregame_hot":
-      return minute % 5 === 0;
-    case "pregame_warm":
-      return minute % 15 === 0;
-    case "recent_final":
-      return minute % 30 === 0;
-    case "final_cold":
-    default:
-      return false;
+async function wasTrackedRecently(env: Env, gameId: string, now: Date, windowMinutes: number): Promise<boolean> {
+  if (!env.DB) {
+    return false;
   }
+
+  const row =
+    (await queryFirst<{ latest_timestamp: string | null }>(
+      env,
+      `SELECT MAX(entry_time) AS latest_timestamp
+       FROM (
+         SELECT MAX(created_at) AS entry_time FROM mlb_live WHERE game_id = ?
+         UNION ALL
+         SELECT MAX(timestamp) AS entry_time FROM mlb_odds_history WHERE game_id = ?
+       )`,
+      [gameId, gameId]
+    )) || null;
+
+  if (!row?.latest_timestamp) {
+    return false;
+  }
+
+  const latest = new Date(row.latest_timestamp);
+  if (Number.isNaN(latest.getTime())) {
+    return false;
+  }
+
+  return now.getTime() - latest.getTime() <= windowMinutes * 60 * 1000;
+}
+
+async function getRecentlyTrackedFinals(
+  env: Env,
+  games: Array<{
+    gameId: string;
+    status: string;
+  }>,
+  now: Date
+) {
+  const finalGames = games.filter((game) => game.status === "FINAL");
+  const recentFlags = await Promise.all(
+    finalGames.map(async (game) => ({
+      gameId: game.gameId,
+      recent: await wasTrackedRecently(env, game.gameId, now, 2)
+    }))
+  );
+
+  return new Set(recentFlags.filter((game) => game.recent).map((game) => game.gameId));
+}
+
+function classifySyncPhase(
+  game: {
+    gameId: string;
+    status: string;
+    startTime: string | null;
+  },
+  now: Date,
+  recentlyTrackedFinals: Set<string>
+): SyncPhase {
+  const persistencePhase = classifyPersistencePhase(game, now);
+  if (persistencePhase !== "idle") {
+    return persistencePhase;
+  }
+
+  if (game.status === "FINAL" && recentlyTrackedFinals.has(game.gameId)) {
+    return "recent_final";
+  }
+
+  return "idle";
 }
 
 function buildSyncPlan(
@@ -89,14 +221,15 @@ function buildSyncPlan(
     startTime: string | null;
     teams: { away: { abbreviation: string }; home: { abbreviation: string } };
   }>,
-  now: Date
+  now: Date,
+  recentlyTrackedFinals: Set<string>
 ) {
-  return games.map((game) => {
-    const phase = classifySyncPhase(game, now);
+  return games.map<SyncPhasePlan>((game) => {
+    const phase = classifySyncPhase(game, now, recentlyTrackedFinals);
     return {
       gameId: game.gameId,
       phase,
-      should_sync: shouldSyncPhase(phase, now),
+      should_sync: shouldSyncPhase(phase),
       status: game.status,
       summary: game.summary,
       startTime: game.startTime,
@@ -382,12 +515,17 @@ async function runLiveSync(env: Env, dateParam?: string | null, gameId?: string 
     shouldPersistGame: gameId
       ? undefined
       : (game) => {
-          const phase = classifySyncPhase(game, now);
-          return shouldSyncPhase(phase, now);
+          const phase = classifyPersistencePhase(game, now);
+          return shouldSyncPhase(phase);
         }
   });
-  const syncPlan = buildSyncPlan(scoreboard.discoveredGames, now);
-  const targetGameIds = gameId ? [gameId] : syncPlan.filter((game) => game.phase === "live").map((game) => game.gameId);
+  const recentlyTrackedFinals = await getRecentlyTrackedFinals(env, scoreboard.discoveredGames, now);
+  const syncPlan = buildSyncPlan(scoreboard.discoveredGames, now, recentlyTrackedFinals);
+  const targetGameIds = gameId
+    ? [gameId]
+    : syncPlan
+        .filter((game) => game.phase === "live" || game.phase === "recent_final")
+        .map((game) => game.gameId);
   const live = targetGameIds.length > 0 ? await syncMlbLiveGames(env, targetGameIds) : { synced_at: new Date().toISOString(), inserted: 0, games: [] };
 
   return {
@@ -455,7 +593,21 @@ async function handleAdminLiveSync(request: Request, env: Env): Promise<Response
 }
 
 async function handleScheduledLiveSync(controller: ScheduledController, env: Env): Promise<void> {
-  const scheduledDate = new Date(controller.scheduledTime).toISOString().slice(0, 10);
+  const now = new Date(controller.scheduledTime);
+  const shouldRun = isMorningPregameRefresh(now) || isFinalArchiveWindow(now) || isMinuteOpsWindow(now);
+  if (!shouldRun) {
+    console.log(
+      JSON.stringify({
+        worker: "router",
+        type: "mlb_live_sync_skipped",
+        scheduled_for: now.toISOString(),
+        reason: "outside_baseball_ops_window"
+      })
+    );
+    return;
+  }
+
+  const scheduledDate = getScheduledSportsDate(now);
   const sync = await runLiveSync(env, scheduledDate, null);
 
   console.log(

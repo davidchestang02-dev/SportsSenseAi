@@ -36,7 +36,7 @@ import {
   TeamMark
 } from "./ui";
 
-const chartColors = ["#2DA8FF", "#5BD3FF", "#FF8A00", "#FFB650", "#18C37E"];
+const chartColors = ["#004A99", "#4C6B8A", "#0F766E", "#CD2026", "#7A8BA3"];
 
 function firstOrNull(rows) {
   return rows && rows.length > 0 ? rows[0] : null;
@@ -523,11 +523,11 @@ function playerSecondaryLine(player) {
   const position = player?.position?.abbreviation || "UTIL";
 
   if (stat.era || stat.inningsPitched) {
-    return `${position} • ${stat.inningsPitched || "--"} IP • ${stat.era || "--"} ERA`;
+    return `${position} | ${stat.inningsPitched || "--"} IP | ${stat.era || "--"} ERA`;
   }
 
   if (stat.ops || stat.avg) {
-    return `${position} • AVG ${stat.avg || "--"} • OPS ${stat.ops || "--"}`;
+    return `${position} | AVG ${stat.avg || "--"} | OPS ${stat.ops || "--"}`;
   }
 
   return position;
@@ -591,8 +591,8 @@ function WindowSummaryCard({ label, summary, isPitcher }) {
       <strong className="detail-card-value">{summary.gamesPlayed} games</strong>
       <p>
         {isPitcher
-          ? `${summary.inningsPitched} IP • ${summary.era ?? "--"} ERA • ${summary.strikeOuts} K`
-          : `${summary.hits} H • ${summary.homeRuns} HR • OPS ${fmtRate(summary.ops)}`}
+          ? `${summary.inningsPitched} IP | ${summary.era ?? "--"} ERA | ${summary.strikeOuts} K`
+          : `${summary.hits} H | ${summary.homeRuns} HR | OPS ${fmtRate(summary.ops)}`}
       </p>
     </article>
   );
@@ -627,7 +627,7 @@ function MatchupTile({ game, isActive, onSelect }) {
       </div>
       <strong>{game.matchupLabel}</strong>
       <small>
-        {formatGameTime(game.gameDate)} • {game.venue?.name || "Venue TBD"}
+        {formatGameTime(game.gameDate)} | {game.venue?.name || "Venue TBD"}
       </small>
     </button>
   );
@@ -645,7 +645,7 @@ function ScoreboardMatchupTile({ game, isActive, onSelect }) {
       </div>
       <strong>{scheduleMatchupLabel(game)}</strong>
       <small>
-        {formatGameTime(game.startTime)} â€¢ {game.location || "Venue TBD"}
+        {formatGameTime(game.startTime)} | {game.location || "Venue TBD"}
       </small>
       <div className="team-pill-row">
         <span className={`status-flag status-flag--${String(game.status || "unknown").toLowerCase()}`}>{String(game.status || "UNKNOWN").replace(/_/g, " ")}</span>
@@ -712,6 +712,8 @@ export function LandingPage({ data, selectedDate }) {
   const topBatter = firstOrNull(data.simulation?.slate?.top_batters || []);
   const topEdge = firstOrNull(data.markets || []);
   const featuredGame = firstOrNull(slate.data?.games || []);
+  const featuredScheduleGame = firstOrNull(data.schedule?.games || []);
+  const topRisk = firstOrNull(data.risk?.recommendations || []);
   const gameOutlook = buildGameOutlook(data.simulation, data.contexts);
   const edgeDistribution = buildEdgeDistribution(data.markets);
 
@@ -719,101 +721,137 @@ export function LandingPage({ data, selectedDate }) {
     <div className="page-shell page-shell--landing">
       <section className="landing-hero">
         <div className="landing-copy">
-          <span className="section-eyebrow">Sports betting intelligence, reimagined</span>
-          <h1>SPORTSSENSE AI helps users understand the slate, trust the signal, and act with conviction.</h1>
+          <span className="section-eyebrow">Accessible MLB operations surface</span>
+          <h1>SportsSense AI turns live slate monitoring, model review, and pricing control into one clear working screen.</h1>
           <p className="landing-lead">
-            Real-time MLB research rooms, branded matchup labs, team profiles, player deep dives, model-driven edge
-            projections, and AI-guided context now live in a single product surface.
+            The deterministic layer, stats layer, live game intake, and market review tools stay intact. What changes
+            here is the surface: higher trust, cleaner hierarchy, and faster movement between schedule, matchup,
+            player, market, and live contexts.
           </p>
 
           <div className="cta-row">
-            <Link className="primary-button" to="/games">
-              Open Matchup Labs
+            <Link className="primary-button" to="/command-center">
+              Open command surface
             </Link>
-            <Link className="secondary-button" to="/players">
-              Explore Player Research
+            <Link className="secondary-button" to="/games">
+              Review today's games
             </Link>
-            <Link className="ghost-button" to="/command-center">
-              View Command Center
+            <Link className="ghost-button" to="/markets">
+              Check market board
             </Link>
           </div>
 
           <div className="hero-stat-grid">
             <div className="hero-stat">
-              <span className="mini-label">Tracked MLB games</span>
+              <span className="mini-label">Tracked games</span>
               <strong>{slate.data?.games?.length || 0}</strong>
             </div>
             <div className="hero-stat">
-              <span className="mini-label">Positive-edge markets</span>
+              <span className="mini-label">Positive edges</span>
               <strong>{data.markets?.length || 0}</strong>
             </div>
             <div className="hero-stat">
-              <span className="mini-label">AI state</span>
+              <span className="mini-label">Platform state</span>
               <strong>{data.health?.ok ? "Live" : "Syncing"}</strong>
             </div>
             <div className="hero-stat">
-              <span className="mini-label">Featured matchup</span>
-              <strong>{featuredGame ? featuredGame.matchupLabel : "Loading slate"}</strong>
+              <span className="mini-label">Featured game</span>
+              <strong>{featuredScheduleGame ? scheduleMatchupLabel(featuredScheduleGame) : featuredGame ? featuredGame.matchupLabel : "Loading slate"}</strong>
             </div>
           </div>
         </div>
 
         <div className="landing-visual">
-          <div className="brand-scene">
-            <div className="brand-scene-grid" />
-            <img className="brand-scene-main" src="/brand/growth-connectivity-icon.png" alt="SportsSense AI hero icon" />
-            <div className="brand-scene-bars">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
+          <article className="landing-summary-card">
+            <span className="mini-label">Today's operating posture</span>
+            <strong>{featuredScheduleGame ? scheduleMatchupLabel(featuredScheduleGame) : "Slate sync in progress"}</strong>
+            <p>
+              {featuredScheduleGame
+                ? `${String(featuredScheduleGame.status || "UNKNOWN").replace(/_/g, " ")} | ${featuredScheduleGame.summary || "Awaiting update"} | ${featuredScheduleGame.location || "Venue TBD"}`
+                : "Live scoreboard, stream metadata, and normalized game pricing load into the shared operations layer."}
+            </p>
+            <div className="landing-summary-grid">
+              <div className="info-pair">
+                <span>Top edge</span>
+                <strong>{topEdge ? `${topEdge.player_name} ${fmtSignedPercent(topEdge.edge)}` : "Waiting on market rows"}</strong>
+              </div>
+              <div className="info-pair">
+                <span>Stake posture</span>
+                <strong>{topRisk ? `$${Math.round(topRisk.capped_stake)}` : "No cap yet"}</strong>
+              </div>
+              <div className="info-pair">
+                <span>Top model signal</span>
+                <strong>{topBatter ? `${topBatter.player_name} ${fmtPercent(topBatter.P_hrh_2p)}` : "Model syncing"}</strong>
+              </div>
+              <div className="info-pair">
+                <span>Book source</span>
+                <strong>{featuredScheduleGame?.odds?.provider?.name || "Pricing pending"}</strong>
+              </div>
             </div>
-            <div className="brand-scene-copy">
-              <img src="/brand/sportssense-circuit-logo.png" alt="SportsSense AI mark" />
-            </div>
-          </div>
+          </article>
 
-          <div className="wireframe-card">
-            <span className="mini-label">Wireframe direction</span>
-            <img src="/brand/figma-wireframe-display.png" alt="SportsSense AI wireframe system" />
-          </div>
+          <article className="landing-summary-card landing-summary-card--accent">
+            <span className="mini-label">Baseball sync cadence</span>
+            <strong>Built for the real daily rhythm of the MLB board.</strong>
+            <div className="landing-cadence-list">
+              <div className="landing-cadence-row">
+                <span>11:00 ET</span>
+                <strong>Daily pregame refresh</strong>
+              </div>
+              <div className="landing-cadence-row">
+                <span>T-60</span>
+                <strong>One-hour prelock validation</strong>
+              </div>
+              <div className="landing-cadence-row">
+                <span>Live</span>
+                <strong>60-second scoreboard + summary sync</strong>
+              </div>
+              <div className="landing-cadence-row">
+                <span>Post</span>
+                <strong>2-minute closeout capture for tracked games</strong>
+              </div>
+              <div className="landing-cadence-row">
+                <span>03:00 ET</span>
+                <strong>Final overnight archive sweep</strong>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
 
       <div className="story-strip">
         <article className="story-card">
-          <span className="card-tag">Top live signal</span>
-          <strong>{topBatter ? `${topBatter.player_name} ${fmtPercent(topBatter.P_hrh_2p)}` : "Waiting on model"}</strong>
-          <p>Model-derived batting signal with matchup context, prop ladder, and full player drill-down.</p>
+          <span className="card-tag">Deterministic layer</span>
+          <strong>{topBatter ? `${topBatter.player_name} ${fmtPercent(topBatter.P_hrh_2p)}` : "Waiting on model output"}</strong>
+          <p>The deterministic signal stack remains present and visible; this redesign changes presentation, not the core model logic.</p>
         </article>
         <article className="story-card">
-          <span className="card-tag">Research workflow</span>
-          <strong>Teams → Matchups → Players → Markets</strong>
-          <p>The product now lets users move from macro slate context to player-level detail without losing continuity.</p>
+          <span className="card-tag">Stats layer</span>
+          <strong>Teams -&gt; Games -&gt; Players -&gt; Markets</strong>
+          <p>Research still moves from the board view down into team, matchup, player, and pricing detail without breaking context.</p>
         </article>
         <article className="story-card">
-          <span className="card-tag">Largest edge</span>
+          <span className="card-tag">Market review</span>
           <strong>{topEdge ? `${topEdge.player_name} ${fmtSignedPercent(topEdge.edge)}` : "Loading edge board"}</strong>
-          <p>Clearer edge surfacing, decision support, bankroll framing, and AI explanation in one interface.</p>
+          <p>Pricing review, bankroll posture, and AI explanation now sit inside a calmer interface built for scanning and trust.</p>
         </article>
       </div>
 
       <div className="platform-grid">
         <article className="platform-card">
-          <span className="mini-label">Matchup Labs</span>
-          <strong>Starting pitcher vs lineup context</strong>
-          <p>Probable-pitcher duel cards, team-vs-hand splits, venue context, and click-through player research.</p>
+          <span className="mini-label">Game operations</span>
+          <strong>Live schedule, stream, and pricing oversight</strong>
+          <p>One place to review game status, venue, watch options, and normalized odds before drilling into deeper matchup research.</p>
         </article>
         <article className="platform-card">
-          <span className="mini-label">Team Profiles</span>
-          <strong>Brand-complete roster pages</strong>
-          <p>Logos, color systems, active rosters, hitter and pitcher tables, and split-aware team snapshots.</p>
+          <span className="mini-label">Research rooms</span>
+          <strong>Team and player context without the noise</strong>
+          <p>Roster cards, split views, recent form, and opponent history remain available, but the visual hierarchy is cleaner and more direct.</p>
         </article>
         <article className="platform-card">
-          <span className="mini-label">Player Research</span>
-          <strong>Season, recent form, and head-to-head</strong>
-          <p>Current season stats, last 3/5/10 windows, split toggles, and batter-vs-pitcher history where available.</p>
+          <span className="mini-label">Decision layer</span>
+          <strong>Model fair, edge, stake, and execution in one pass</strong>
+          <p>The market, risk, and autobet views still work together, now with a more legible layout for operational review.</p>
         </article>
       </div>
 
@@ -827,8 +865,8 @@ export function LandingPage({ data, selectedDate }) {
                 <YAxis yAxisId="left" tickLine={false} axisLine={false} />
                 <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
                 <Tooltip />
-                <Bar yAxisId="left" dataKey="projected_total" fill="#2DA8FF" radius={[10, 10, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="run_environment" stroke="#FF8A00" strokeWidth={3} dot={{ r: 4 }} />
+                <Bar yAxisId="left" dataKey="projected_total" fill="#004A99" radius={[10, 10, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="run_environment" stroke="#CD2026" strokeWidth={3} dot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
           )}
@@ -853,22 +891,22 @@ export function LandingPage({ data, selectedDate }) {
         </PagePanel>
       </div>
 
-      <PagePanel eyebrow="Splash direction" title="3.6-second motion sequence" description="The landing experience is styled around the grid, circuit, globe, bars, and arrow motif from the provided design brief.">
+      <PagePanel eyebrow="Operating cadence" title="What runs when" description="The app now mirrors a baseball-first operating cadence instead of refreshing constantly all day.">
         <div className="story-strip">
           <article className="detail-card">
             <span className="detail-label">01</span>
-            <strong>Grid fades in</strong>
-            <p>Backdrop grid and radial glow establish the product as a data-first interface.</p>
+            <strong>11:00 ET board setup</strong>
+            <p>Pregame sync establishes the daily slate, stream surface, and game-level pricing before the board gets busy.</p>
           </article>
           <article className="detail-card">
             <span className="detail-label">02</span>
-            <strong>Circuit lines activate</strong>
-            <p>Orange and blue traces animate through the hero scene to echo the brand assets you provided.</p>
+            <strong>T-60 validation</strong>
+            <p>Each matchup gets another pass in the hour before first pitch, keeping the surface calm but timely.</p>
           </article>
           <article className="detail-card">
             <span className="detail-label">03</span>
-            <strong>Bars rise and arrow sweeps</strong>
-            <p>The hero icon treatment visually reinforces growth, edge discovery, and confident action.</p>
+            <strong>Live closeout + 3 AM archive</strong>
+            <p>Tracked games close out within minutes, while a 3 AM ET sweep preserves the full final board for next-day modeling.</p>
           </article>
         </div>
       </PagePanel>
@@ -924,8 +962,8 @@ export function CommandCenterPage({ data, selectedDate }) {
                 <YAxis yAxisId="left" tickLine={false} axisLine={false} />
                 <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
                 <Tooltip />
-                <Bar yAxisId="left" dataKey="projected_total" fill="#2DA8FF" radius={[10, 10, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="run_environment" stroke="#FF8A00" strokeWidth={3} dot={{ r: 4 }} />
+                <Bar yAxisId="left" dataKey="projected_total" fill="#004A99" radius={[10, 10, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="run_environment" stroke="#CD2026" strokeWidth={3} dot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
           )}
@@ -940,8 +978,8 @@ export function CommandCenterPage({ data, selectedDate }) {
                 <YAxis tickLine={false} axisLine={false} />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="projected" stroke="#2DA8FF" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="actual" stroke="#18C37E" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="projected" stroke="#004A99" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="actual" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -1078,7 +1116,7 @@ export function TeamsPage({ selectedDate }) {
                   <span className="detail-label">Club profile</span>
                   <strong className="detail-card-value">{team.shortName}</strong>
                   <p>
-                    {team.locationName || team.name} • {team.league || "League"} • {team.division || "Division"}
+                    {team.locationName || team.name} | {team.league || "League"} | {team.division || "Division"}
                   </p>
                 </div>
               </div>
@@ -1343,8 +1381,8 @@ export function GamesPage({ data, selectedDate }) {
                             <YAxis tickLine={false} axisLine={false} />
                             <Tooltip />
                             <Legend />
-                            <Line type="monotone" dataKey="awayMoneyline" name={`${featuredScheduleGame.teams?.away?.abbreviation || "Away"} ML`} stroke="#2DA8FF" strokeWidth={3} dot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="homeMoneyline" name={`${featuredScheduleGame.teams?.home?.abbreviation || "Home"} ML`} stroke="#FF8A00" strokeWidth={3} dot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="awayMoneyline" name={`${featuredScheduleGame.teams?.away?.abbreviation || "Away"} ML`} stroke="#004A99" strokeWidth={3} dot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="homeMoneyline" name={`${featuredScheduleGame.teams?.home?.abbreviation || "Home"} ML`} stroke="#CD2026" strokeWidth={3} dot={{ r: 3 }} />
                           </LineChart>
                         </ResponsiveContainer>
                       )
@@ -1484,7 +1522,7 @@ export function GamesPage({ data, selectedDate }) {
                     <YAxis type="number" dataKey="run_environment" name="Run environment" tickLine={false} axisLine={false} />
                     <ZAxis type="number" dataKey="confidence" range={[80, 260]} />
                     <Tooltip cursor={{ strokeDasharray: "4 4" }} />
-                    <Scatter data={scatterData} fill="#FF8A00" />
+                    <Scatter data={scatterData} fill="#CD2026" />
                   </ScatterChart>
                 </ResponsiveContainer>
               )
@@ -1701,8 +1739,8 @@ export function PlayersPage({ data, selectedDate }) {
                 <span className="section-eyebrow">{playerResearch.data.player.primaryPosition?.abbreviation || "MLB"}</span>
                 <h3>{playerResearch.data.player.fullName}</h3>
                 <p>
-                  {playerResearch.data.player.currentTeam?.name || "Current team"} • Bats {playerResearch.data.player.bats || "--"} / Throws{" "}
-                  {playerResearch.data.player.throws || "--"} • {playerResearch.data.player.height || "Height"} • {playerResearch.data.player.weight || "--"} lbs
+                  {playerResearch.data.player.currentTeam?.name || "Current team"} | Bats {playerResearch.data.player.bats || "--"} / Throws{" "}
+                  {playerResearch.data.player.throws || "--"} | {playerResearch.data.player.height || "Height"} | {playerResearch.data.player.weight || "--"} lbs
                 </p>
               </div>
             </div>
@@ -1735,15 +1773,15 @@ export function PlayersPage({ data, selectedDate }) {
                       <Legend />
                       {isPitcher ? (
                         <>
-                          <Line type="monotone" dataKey="strikeOuts" stroke="#2DA8FF" strokeWidth={3} dot={{ r: 4 }} />
-                          <Line type="monotone" dataKey="earnedRuns" stroke="#FF8A00" strokeWidth={3} dot={{ r: 4 }} />
-                          <Line type="monotone" dataKey="hits" stroke="#18C37E" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="strikeOuts" stroke="#004A99" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="earnedRuns" stroke="#CD2026" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="hits" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
                         </>
                       ) : (
                         <>
-                          <Line type="monotone" dataKey="hits" stroke="#2DA8FF" strokeWidth={3} dot={{ r: 4 }} />
-                          <Line type="monotone" dataKey="totalBases" stroke="#FF8A00" strokeWidth={3} dot={{ r: 4 }} />
-                          <Line type="monotone" dataKey="rbi" stroke="#18C37E" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="hits" stroke="#004A99" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="totalBases" stroke="#CD2026" strokeWidth={3} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="rbi" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
                         </>
                       )}
                     </LineChart>
@@ -1807,8 +1845,8 @@ export function PlayersPage({ data, selectedDate }) {
                     <strong className="detail-card-value">{playerResearch.data.opponentHistory.games.length} games</strong>
                     <p>
                       {isPitcher
-                        ? `${playerResearch.data.opponentHistory.summary.inningsPitched} IP • ${playerResearch.data.opponentHistory.summary.era ?? "--"} ERA`
-                        : `${playerResearch.data.opponentHistory.summary.hits} H • OPS ${fmtRate(playerResearch.data.opponentHistory.summary.ops)}`}
+                        ? `${playerResearch.data.opponentHistory.summary.inningsPitched} IP | ${playerResearch.data.opponentHistory.summary.era ?? "--"} ERA`
+                        : `${playerResearch.data.opponentHistory.summary.hits} H | OPS ${fmtRate(playerResearch.data.opponentHistory.summary.ops)}`}
                     </p>
                   </div>
                   <div className="table-shell">
@@ -2171,7 +2209,7 @@ export function LivePage({ data, selectedDate }) {
                       <XAxis dataKey="label" tickLine={false} axisLine={false} />
                       <YAxis tickLine={false} axisLine={false} />
                       <Tooltip />
-                      <Line type="monotone" dataKey="speed" stroke="#2DA8FF" strokeWidth={3} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="speed" stroke="#004A99" strokeWidth={3} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 )
@@ -2189,7 +2227,7 @@ export function LivePage({ data, selectedDate }) {
                       <XAxis dataKey="pitch_type" tickLine={false} axisLine={false} />
                       <YAxis tickLine={false} axisLine={false} />
                       <Tooltip />
-                      <Bar dataKey="count" fill="#FF8A00" radius={[10, 10, 0, 0]} />
+                      <Bar dataKey="count" fill="#CD2026" radius={[10, 10, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )

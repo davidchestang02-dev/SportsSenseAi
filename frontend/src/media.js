@@ -1,9 +1,9 @@
 const SPORTS_SENSE_BRAND = {
   abbreviation: "SSA",
-  color: "#2DA8FF",
-  alternateColor: "#FF8A00",
-  logo: "/brand/growth-connectivity-icon.png",
-  darkLogo: "/brand/sportssense-circuit-logo.png"
+  color: "#004A99",
+  alternateColor: "#7A8BA3",
+  logo: "/favicon.svg",
+  darkLogo: "/favicon.svg"
 };
 
 function initialsFromName(name) {
@@ -32,8 +32,8 @@ export function getTeamBrand(team) {
   if (!team) {
     return {
       abbreviation: "MLB",
-      color: "#2DA8FF",
-      alternateColor: "#A8E7FF",
+      color: "#004A99",
+      alternateColor: "#7A8BA3",
       logo: "",
       darkLogo: ""
     };
@@ -45,8 +45,8 @@ export function getTeamBrand(team) {
 
     return {
       abbreviation: brand.abbreviation || label || initialsFromName(team.name || team.displayName),
-      color: brand.color || "#2DA8FF",
-      alternateColor: brand.alternateColor || "#A8E7FF",
+      color: brand.color || "#004A99",
+      alternateColor: brand.alternateColor || "#7A8BA3",
       logo: brand.logo || brand.scoreboardLogo || "",
       darkLogo: brand.darkLogo || brand.logo || ""
     };
@@ -54,8 +54,8 @@ export function getTeamBrand(team) {
 
   return {
     abbreviation: initialsFromName(team),
-    color: "#2DA8FF",
-    alternateColor: "#A8E7FF",
+    color: "#004A99",
+    alternateColor: "#7A8BA3",
     logo: "",
     darkLogo: ""
   };
