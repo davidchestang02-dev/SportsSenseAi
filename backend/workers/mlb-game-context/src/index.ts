@@ -63,8 +63,8 @@ export const MLB_LIVE_SYNC_PROFILE = {
   },
   configured_cron_target: {
     expression: "*/1 * * * *",
-    status: "blocked_by_cloudflare_account_limit",
-    note: "Production could not attach the trigger because this Cloudflare account is already at the 5-cron-trigger limit."
+    status: "active_in_production",
+    note: "Production cron is attached and drives the minute-level live-sync cadence. Staging intentionally runs without a cron."
   },
   server_phase_rules: {
     live: {

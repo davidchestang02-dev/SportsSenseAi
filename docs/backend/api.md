@@ -32,8 +32,9 @@ The MLB schedule routes now source slate, game detail, odds, and stream metadata
 
 Live-ops cadence:
 
-- The live-sync code path is configured for a `*/1 * * * *` Cloudflare cron, but production could not attach it because this account is already at the 5-trigger limit.
-- The current production fallback is the internal `GET /admin/mlb/live-sync` route plus app-side polling.
+- Production now has an active `*/1 * * * *` Cloudflare cron for the live-sync code path.
+- Staging intentionally has no cron attached so it does not consume account schedule capacity.
+- The internal `GET /admin/mlb/live-sync` route remains available for manual verification and forced refreshes.
 - The app uses faster request-time polling for active games: schedule every 30 seconds and live summary snapshots every 15 seconds.
 - ESPN-style sub-minute play-by-play targets remain the next step and are documented separately from the currently implemented cadence.
 

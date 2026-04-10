@@ -67,8 +67,9 @@ These routes use D1 when rows exist, but they still fall back to mock output whe
 
 ## Live Ops Notes
 
-- The live-sync code path is configured for a `*/1 * * * *` Cloudflare cron, but production could not attach it because this account is already at the 5-trigger limit.
-- Current production live-sync fallback is `GET /admin/mlb/live-sync`, which was verified against the live Rockies-Padres game `401814875` on April 9, 2026.
+- Production now has an active `*/1 * * * *` Cloudflare cron for the live-sync code path.
+- Staging intentionally runs without a cron so production keeps the account schedule slot.
+- `GET /admin/mlb/live-sync` remains the manual verification and force-refresh route, and it was verified against the live Rockies-Padres game `401814875` on April 9, 2026.
 - Current app cadence for live betting surfaces is 15 seconds for `/live/mlb?refresh=1` and 30 seconds for `/schedule/mlb`.
 - ESPN-style 5-second play-by-play polling remains a target profile for a future dedicated live feed worker.
 
