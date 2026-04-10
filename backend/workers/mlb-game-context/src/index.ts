@@ -52,14 +52,16 @@ export const MLB_LIVE_SYNC_PROFILE = {
     note: "Cron runs on one-minute granularity. Sub-minute live-betting refresh stays at the app and API layer."
   },
   implemented_now: {
-    cron: {
-      expression: "*/1 * * * *",
-      scope: "Discover live MLB games, persist odds history, and write summary snapshots into mlb_live."
-    },
+    manual_route: "/admin/mlb/live-sync",
     app: {
       schedule_refresh_ms: 30000,
       live_snapshot_refresh_ms: 15000
     }
+  },
+  configured_cron_target: {
+    expression: "*/1 * * * *",
+    status: "blocked_by_cloudflare_account_limit",
+    note: "Production could not attach the trigger because this Cloudflare account is already at the 5-cron-trigger limit."
   },
   target_profile: {
     play_by_play_ms: 5000,

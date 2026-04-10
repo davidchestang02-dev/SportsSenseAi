@@ -171,9 +171,10 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
     path: "/admin/mlb/live-sync",
     worker: "router",
     source_mode: "external_plus_db",
-    verification_status: "partial",
+    verification_status: "verified",
     tables: ["mlb_odds", "mlb_odds_history", "mlb_live"],
-    notes: "Internal live-ops route that discovers live games from ESPN, persists odds history, and writes summary snapshots into mlb_live."
+    notes:
+      "Internal live-ops route that discovers live games from ESPN, persists odds history, and writes summary snapshots into mlb_live. Verified manually against live game 401814875."
   },
   {
     path: "/research/mlb/slate",

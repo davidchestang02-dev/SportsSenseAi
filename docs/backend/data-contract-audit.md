@@ -34,7 +34,7 @@ This audit is the current route-to-source map for the public MLB product. It is 
 | `/game-context/mlb` | `mlb-game-context` | `db_or_mock` | `mlb_game_context` | Partial |
 | `/admin/mlb/health-data` | `mlb-game-context` | `db_or_mock` | `mlb_calibration` | Partial |
 | `/admin/mlb/data-health` | `router` | `db_only` | multiple | Verified |
-| `/admin/mlb/live-sync` | `router` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_live` | Partial |
+| `/admin/mlb/live-sync` | `router` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_live` | Verified |
 | `/research/mlb/slate` | `mlb-research` | `external` | none | Verified |
 | `/research/mlb/team/:teamId` | `mlb-research` | `external` | none | Verified |
 | `/research/mlb/player/:playerId` | `mlb-research` | `external` | none | Verified |
@@ -67,7 +67,8 @@ These routes use D1 when rows exist, but they still fall back to mock output whe
 
 ## Live Ops Notes
 
-- Current production cron cadence is `*/1 * * * *` because Cloudflare Cron Triggers do not support sub-minute execution.
+- The live-sync code path is configured for a `*/1 * * * *` Cloudflare cron, but production could not attach it because this account is already at the 5-trigger limit.
+- Current production live-sync fallback is `GET /admin/mlb/live-sync`, which was verified against the live Rockies-Padres game `401814875` on April 9, 2026.
 - Current app cadence for live betting surfaces is 15 seconds for `/live/mlb?refresh=1` and 30 seconds for `/schedule/mlb`.
 - ESPN-style 5-second play-by-play polling remains a target profile for a future dedicated live feed worker.
 
