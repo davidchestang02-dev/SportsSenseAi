@@ -1,9 +1,22 @@
 import { useState } from "react";
 
-import { getPlayerHeadshotUrl, getTeamBrand, getTeamLogoUrl, playerInitials } from "./media";
+import { getPlayerHeadshotUrl, getTeamBrand, getTeamLabel, getTeamLogoUrl, playerInitials } from "./media";
 
 export function fmtPercent(value) {
   return `${Math.round((Number(value) || 0) * 100)}%`;
+}
+
+export function fmtRate(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) {
+    return "--";
+  }
+
+  if (number >= 1) {
+    return number.toFixed(3);
+  }
+
+  return number.toFixed(3).replace(/^0/, "");
 }
 
 export function fmtSignedPercent(value) {
@@ -24,36 +37,38 @@ export function TeamMark({ team, compact = false }) {
   const [broken, setBroken] = useState(false);
   const brand = getTeamBrand(team);
   const logoUrl = getTeamLogoUrl(team);
+  const label = getTeamLabel(team);
 
   return (
     <span className={`team-pill${compact ? " compact" : ""}`}>
       <span
         className="team-logo-frame"
         style={{
-          background: `linear-gradient(135deg, ${brand.colors[0]}, ${brand.colors[1]})`
+          background: `linear-gradient(135deg, ${brand.color}, ${brand.alternateColor})`
         }}
       >
         {logoUrl && !broken ? (
-          <img src={logoUrl} alt={`${team} logo`} onError={() => setBroken(true)} />
+          <img src={logoUrl} alt={`${label} logo`} onError={() => setBroken(true)} />
         ) : (
-          <span>{brand.abbr}</span>
+          <span>{brand.abbreviation}</span>
         )}
       </span>
-      {!compact ? <span>{team}</span> : null}
+      {!compact ? <span>{label}</span> : null}
     </span>
   );
 }
 
 export function PlayerPortrait({ player }) {
   const [broken, setBroken] = useState(false);
-  const alt = `${player.player_name} portrait`;
+  const playerName = player?.fullName || player?.player_name || "Player";
+  const alt = `${playerName} portrait`;
 
   return (
     <div className="portrait">
       {!broken ? (
         <img src={getPlayerHeadshotUrl(player)} alt={alt} onError={() => setBroken(true)} />
       ) : (
-        <span>{playerInitials(player.player_name)}</span>
+        <span>{playerInitials(playerName)}</span>
       )}
     </div>
   );

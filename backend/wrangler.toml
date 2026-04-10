@@ -34,6 +34,9 @@ bucket_name = "sportssenseai-mlb-bucket"
 [env.staging]
 name = "sportssenseai-api-staging"
 
+[env.staging.triggers]
+crons = ["*/1 * * * *"]
+
 [env.staging.ai]
 binding = "AI"
 
@@ -62,6 +65,9 @@ bucket_name = "sportssenseai-mlb-bucket"
 
 [env.production]
 name = "sportssenseai-api"
+
+[env.production.triggers]
+crons = ["*/1 * * * *"]
 
 [env.production.ai]
 binding = "AI"

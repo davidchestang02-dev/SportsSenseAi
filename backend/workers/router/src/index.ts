@@ -1,13 +1,16 @@
 import { execute, queryFirst } from "../../shared/db";
+import { getDataHealthSnapshot } from "../../shared/dataContracts";
 import { hashPassword, requireToken, signToken } from "../../shared/auth";
 import { getMockCalibration, getMockSlate } from "../../shared/mockData";
+import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { CalibrationRow, Env } from "../../shared/types";
 import { handleAutoBetRequest } from "../../mlb-autobet/src/index";
-import { handleGameContextRequest } from "../../mlb-game-context/src/index";
+import { handleGameContextRequest, MLB_LIVE_SYNC_PROFILE, syncMlbLiveGames } from "../../mlb-game-context/src/index";
 import { handleLineupsRequest } from "../../mlb-lineups/src/index";
 import { handleMarketMakerRequest } from "../../mlb-market-maker/src/index";
+import { handleResearchRequest } from "../../mlb-research/src/index";
 import { handleRiskEngineRequest } from "../../mlb-risk-engine/src/index";
-import { handleScheduleRequest } from "../../mlb-schedule/src/index";
+import { handleScheduleRequest, syncMlbScoreboardOdds } from "../../mlb-schedule/src/index";
 import { handleSimRequest } from "../../mlb-sim/src/index";
 import { handleOptions, json, notFound, parseDate, withError } from "../../shared/utils";
 
@@ -233,6 +236,112 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function handleAdminDataHealth(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return json({ error: "Method not allowed" }, 405, env);
+  }
+
+  const snapshot = await getDataHealthSnapshot(env);
+  return jsonWithSourceMeta(
+    request,
+    snapshot,
+    {
+      route: "/admin/mlb/data-health",
+      source: "db_audit",
+      tables: snapshot.tables.map((table) => table.table),
+      notes: "Internal audit snapshot for D1 coverage, mock risk, and route-to-source verification."
+    },
+    200,
+    env
+  );
+}
+
+async function runLiveSync(env: Env, dateParam?: string | null, gameId?: string | null) {
+  const date = parseDate(dateParam);
+  const scoreboard = await syncMlbScoreboardOdds(env, date, {
+    gameIds: gameId ? [gameId] : undefined,
+    liveOpsOnly: !gameId,
+    now: new Date()
+  });
+  const targetGameIds = gameId ? [gameId] : scoreboard.liveGames.map((game) => game.gameId);
+  const live = targetGameIds.length > 0 ? await syncMlbLiveGames(env, targetGameIds) : { synced_at: new Date().toISOString(), inserted: 0, games: [] };
+
+  return {
+    date,
+    scoreboard,
+    targetGameIds,
+    live
+  };
+}
+
+async function handleAdminLiveSync(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return json({ error: "Method not allowed" }, 405, env);
+  }
+
+  const url = new URL(request.url);
+  const gameId = url.searchParams.get("game_id");
+  const sync = await runLiveSync(env, url.searchParams.get("date"), gameId);
+
+  return jsonWithSourceMeta(
+    request,
+    {
+      date: sync.date,
+      test_game_id: gameId,
+      target_game_ids: sync.targetGameIds,
+      polling: MLB_LIVE_SYNC_PROFILE,
+      scoreboard: {
+        discovered_games: sync.scoreboard.discoveredGames.length,
+        synced_games: sync.scoreboard.games.length,
+        live_games: sync.scoreboard.liveGames.map((game) => ({
+          gameId: game.gameId,
+          status: game.status,
+          summary: game.summary,
+          startTime: game.startTime,
+          teams: {
+            away: game.teams.away.abbreviation,
+            home: game.teams.home.abbreviation
+          }
+        })),
+        odds_snapshots_attempted: sync.scoreboard.oddsSnapshotsAttempted,
+        odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
+      },
+      live_sync: sync.live
+    },
+    {
+      route: "/admin/mlb/live-sync",
+      source: "external_plus_db",
+      tables: ["mlb_odds", "mlb_odds_history", "mlb_live"],
+      notes:
+        "Internal live-ops route that discovers live MLB games from ESPN, persists scoreboard odds snapshots, and writes summary snapshots into mlb_live.",
+      breakdown: {
+        target_games: sync.targetGameIds.length,
+        live_rows_inserted: sync.live.inserted,
+        odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
+      }
+    },
+    200,
+    env
+  );
+}
+
+async function handleScheduledLiveSync(controller: ScheduledController, env: Env): Promise<void> {
+  const scheduledDate = new Date(controller.scheduledTime).toISOString().slice(0, 10);
+  const sync = await runLiveSync(env, scheduledDate, null);
+
+  console.log(
+    JSON.stringify({
+      worker: "router",
+      type: "mlb_live_sync",
+      scheduled_for: new Date(controller.scheduledTime).toISOString(),
+      date: sync.date,
+      target_games: sync.targetGameIds,
+      live_rows_inserted: sync.live.inserted,
+      odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
+    })
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const optionsResponse = handleOptions(request, env);
@@ -245,13 +354,15 @@ export default {
 
     try {
       if (path === "/health") {
-        const healthData =
-          (await queryFirst<CalibrationRow>(
-            env,
-            "SELECT date, prop_type, bucket, proj_avg, actual_avg, count FROM mlb_calibration ORDER BY date DESC LIMIT 1"
-          )) || getMockCalibration(parseDate(url.searchParams.get("date")))[0];
+        const calibrationRow = await queryFirst<CalibrationRow>(
+          env,
+          "SELECT date, prop_type, bucket, proj_avg, actual_avg, count FROM mlb_calibration ORDER BY date DESC LIMIT 1"
+        );
+        const healthData = calibrationRow || getMockCalibration(parseDate(url.searchParams.get("date")))[0];
+        const source = calibrationRow ? "db" : "mock";
 
-        return json(
+        return jsonWithSourceMeta(
+          request,
           {
             ok: true,
             app: "SportsSenseAi",
@@ -259,14 +370,24 @@ export default {
             db_bound: Boolean(env.DB),
             latest_calibration: healthData
           },
+          {
+            route: "/health",
+            source,
+            tables: ["mlb_calibration"],
+            notes: source === "db" ? "Latest calibration row resolved from D1." : "Returned seeded calibration fallback."
+          },
           200,
           env
         );
       }
 
       if (path.startsWith("/auth")) return handleAuth(request, env);
+      if (path === "/admin/mlb/data-health") return handleAdminDataHealth(request, env);
+      if (path === "/admin/mlb/live-sync") return handleAdminLiveSync(request, env);
       if (path.startsWith("/billing")) return handleBilling(request, env);
-      if (path.startsWith("/project/mlb") || path.startsWith("/schedule/mlb")) return handleScheduleRequest(request, env);
+      if (path.startsWith("/project/mlb") || path.startsWith("/schedule/mlb") || path.startsWith("/games/mlb")) {
+        return handleScheduleRequest(request, env);
+      }
       if (path.startsWith("/lineups/mlb")) return handleLineupsRequest(request, env);
       if (
         path.startsWith("/game/mlb") ||
@@ -279,6 +400,7 @@ export default {
       }
       if (path.startsWith("/sim/mlb")) return handleSimRequest(request, env);
       if (path.startsWith("/market/mlb")) return handleMarketMakerRequest(request, env);
+      if (path.startsWith("/research/mlb")) return handleResearchRequest(request, env);
       if (path.startsWith("/risk/mlb")) return handleRiskEngineRequest(request, env);
       if (path.startsWith("/autobet/mlb")) return handleAutoBetRequest(request, env);
       if (path.startsWith("/mlb/qa")) return handleAiGateway(request, env);
@@ -287,5 +409,13 @@ export default {
     } catch (error) {
       return withError(error, env);
     }
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      handleScheduledLiveSync(controller, env).catch((error) => {
+        console.error("Scheduled MLB live sync failed", error);
+      })
+    );
   }
 };

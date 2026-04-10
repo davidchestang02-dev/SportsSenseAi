@@ -1,32 +1,13 @@
-const TEAM_BRANDS = {
-  "New York Yankees": { abbr: "NYY", colors: ["#132448", "#c4ced4"], officialId: 147 },
-  "Boston Red Sox": { abbr: "BOS", colors: ["#bd3039", "#0c2340"], officialId: 111 },
-  "Los Angeles Dodgers": { abbr: "LAD", colors: ["#005a9c", "#ffffff"], officialId: 119 },
-  "San Diego Padres": { abbr: "SD", colors: ["#2f241d", "#ffc425"], officialId: 135 },
-  SportsSenseAi: { abbr: "SSA", colors: ["#0c6f77", "#6cd4c6"], officialId: null }
+const SPORTS_SENSE_BRAND = {
+  abbreviation: "SSA",
+  color: "#2DA8FF",
+  alternateColor: "#FF8A00",
+  logo: "/brand/growth-connectivity-icon.png",
+  darkLogo: "/brand/sportssense-circuit-logo.png"
 };
 
-const PLAYER_HEADSHOT_IDS = {
-  "Juan Soto": 665742,
-  "Aaron Judge": 592450,
-  "Jazz Chisholm Jr.": 665862,
-  "Gerrit Cole": 543037,
-  "Jarren Duran": 680776,
-  "Rafael Devers": 646240,
-  "Triston Casas": 671213,
-  "Brayan Bello": 678394,
-  "Mookie Betts": 605141,
-  "Shohei Ohtani": 660271,
-  "Freddie Freeman": 518692,
-  "Tyler Glasnow": 607192,
-  "Fernando Tatis Jr.": 665487,
-  "Manny Machado": 592518,
-  "Jackson Merrill": 701538,
-  "Yu Darvish": 506433
-};
-
-function teamInitials(name) {
-  return name
+function initialsFromName(name) {
+  return String(name || "")
     .split(" ")
     .filter(Boolean)
     .map((word) => word[0])
@@ -35,34 +16,69 @@ function teamInitials(name) {
     .toUpperCase();
 }
 
+function mlbHeadshotUrl(playerId) {
+  if (!playerId) {
+    return "";
+  }
+
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/w_360,q_auto:best/v1/people/${playerId}/headshot/67/current`;
+}
+
 export function getTeamBrand(team) {
-  const brand = TEAM_BRANDS[team];
-  if (brand) {
-    return brand;
+  if (typeof team === "string" && team === "SportsSenseAi") {
+    return SPORTS_SENSE_BRAND;
+  }
+
+  if (!team) {
+    return {
+      abbreviation: "MLB",
+      color: "#2DA8FF",
+      alternateColor: "#A8E7FF",
+      logo: "",
+      darkLogo: ""
+    };
+  }
+
+  if (typeof team === "object") {
+    const label = team.abbreviation || team.shortName || team.name || team.displayName || "";
+    const brand = team.brand || {};
+
+    return {
+      abbreviation: brand.abbreviation || label || initialsFromName(team.name || team.displayName),
+      color: brand.color || "#2DA8FF",
+      alternateColor: brand.alternateColor || "#A8E7FF",
+      logo: brand.logo || brand.scoreboardLogo || "",
+      darkLogo: brand.darkLogo || brand.logo || ""
+    };
   }
 
   return {
-    abbr: teamInitials(team),
-    colors: ["#0e3542", "#6a90a5"],
-    officialId: null
+    abbreviation: initialsFromName(team),
+    color: "#2DA8FF",
+    alternateColor: "#A8E7FF",
+    logo: "",
+    darkLogo: ""
   };
 }
 
 export function getTeamLogoUrl(team) {
-  const brand = getTeamBrand(team);
-  if (!brand.officialId) {
-    return "";
+  return getTeamBrand(team).logo || "";
+}
+
+export function getTeamLabel(team) {
+  if (typeof team === "string") {
+    return team;
   }
-  return `https://www.mlbstatic.com/team-logos/${brand.officialId}.svg`;
+
+  return team?.name || team?.displayName || team?.shortName || team?.abbreviation || "Team";
 }
 
 export function getPlayerHeadshotUrl(player) {
-  const officialId = PLAYER_HEADSHOT_IDS[player.player_name] || player.player_id;
-  return `https://img.mlbstatic.com/mlb-photos/image/upload/w_180,q_auto:best/v1/people/${officialId}/headshot/67/current`;
+  return player?.headshotUrl || player?.headshot?.href || player?.headshot || mlbHeadshotUrl(player?.id || player?.playerId || player?.player_id);
 }
 
 export function playerInitials(name) {
-  return name
+  return String(name || "")
     .split(" ")
     .filter(Boolean)
     .map((part) => part[0])

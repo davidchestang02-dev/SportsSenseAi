@@ -1,7 +1,8 @@
 import { queryAll } from "../../shared/db";
 import { getMockGameContexts, getMockSlate } from "../../shared/mockData";
+import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { Env, ProjectionRow } from "../../shared/types";
-import { json, methodNotAllowed, parseDate, round, withError } from "../../shared/utils";
+import { methodNotAllowed, parseDate, round, withError } from "../../shared/utils";
 
 type TeamSummary = {
   team: string;
@@ -11,6 +12,24 @@ type TeamSummary = {
   expected_total_bases: number;
   expected_runs: number;
   average_confidence: number;
+};
+
+type ContextSummary = {
+  date: string;
+  game_id: string;
+  away_team: string;
+  away_team_id: number;
+  home_team: string;
+  home_team_id: number;
+  weather_desc: string;
+  temp: number;
+  wind: number;
+  park_name: string;
+  park_factor: number;
+  umpire_name: string;
+  run_environment: number;
+  bullpen_edge: number;
+  confidence: number;
 };
 
 export async function handleSimRequest(request: Request, env: Env): Promise<Response> {
@@ -26,9 +45,19 @@ export async function handleSimRequest(request: Request, env: Env): Promise<Resp
         env,
         "SELECT * FROM mlb_projections WHERE date = ? ORDER BY compositeScore DESC",
         [date]
-      )) || getMockSlate(date);
+      )) || [];
+    const contexts =
+      (await queryAll<ContextSummary>(
+        env,
+        "SELECT date, game_id, away_team, away_team_id, home_team, home_team_id, weather_desc, temp, wind, park_name, park_factor, umpire_name, run_environment, bullpen_edge, confidence FROM mlb_game_context WHERE date = ? ORDER BY confidence DESC",
+        [date]
+      )) || [];
+    const playerSource = rows.length > 0 ? "db" : "mock";
+    const contextSource = contexts.length > 0 ? "db" : "mock";
+    const playerRows = rows.length > 0 ? rows : getMockSlate(date);
+    const contextRows = contexts.length > 0 ? contexts : getMockGameContexts(date);
 
-    const batters = rows.filter((row) => row.type === "batter");
+    const batters = playerRows.filter((row) => row.type === "batter");
     const grouped = new Map<string, TeamSummary>();
 
     for (const row of batters) {
@@ -59,7 +88,7 @@ export async function handleSimRequest(request: Request, env: Env): Promise<Resp
       average_confidence: round(team.average_confidence / 3, 1)
     }));
 
-    const games = getMockGameContexts(date).map((context) => {
+    const games = contextRows.map((context) => {
       const gameTeams = teams.filter((team) => team.game_id === context.game_id);
       return {
         game_id: context.game_id,
@@ -70,17 +99,29 @@ export async function handleSimRequest(request: Request, env: Env): Promise<Resp
       };
     });
 
-    return json(
+    return jsonWithSourceMeta(
+      request,
       {
         date,
-        players: rows,
+        players: playerRows,
         teams,
         games,
         slate: {
-          average_confidence: round(rows.reduce((total, row) => total + row.compositeScore, 0) / rows.length, 2),
+          average_confidence: round(playerRows.reduce((total, row) => total + row.compositeScore, 0) / playerRows.length, 2),
           top_batters: batters.slice(0, 5),
-          top_pitchers: rows.filter((row) => row.type === "pitcher").slice(0, 4)
+          top_pitchers: playerRows.filter((row) => row.type === "pitcher").slice(0, 4)
         }
+      },
+      {
+        route: "/sim/mlb",
+        source: playerSource === "db" && contextSource === "db" ? "db" : playerSource === "db" || contextSource === "db" ? "db_partial" : "mock",
+        tables: ["mlb_projections", "mlb_game_context"],
+        notes:
+          playerSource === "db" && contextSource === "db"
+            ? "Projection and game-context summaries both resolved from D1."
+            : playerSource === "db" || contextSource === "db"
+              ? `Mixed source response: projections from ${playerSource}, game context from ${contextSource}.`
+              : "Projection and game-context summaries both used seeded mock data."
       },
       200,
       env

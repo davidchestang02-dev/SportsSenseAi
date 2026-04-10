@@ -15,6 +15,114 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
 }
 
+export type League = "MLB";
+
+export interface NormalizedOddsPoint {
+  line: number | null;
+  odds: number | null;
+}
+
+export interface NormalizedMoneylineSide {
+  open: number | null;
+  close: number | null;
+  current: number | null;
+  isFavorite: boolean;
+  isUnderdog: boolean;
+}
+
+export interface NormalizedBookProvider {
+  name: string;
+  id: string | null;
+  logo: {
+    light: string | null;
+    dark: string | null;
+  };
+  deepLink: string | null;
+}
+
+export interface NormalizedGameOdds {
+  gameId: string;
+  provider: NormalizedBookProvider | null;
+  moneyline: {
+    home: NormalizedMoneylineSide;
+    away: NormalizedMoneylineSide;
+  };
+  spread: {
+    home: {
+      open: NormalizedOddsPoint;
+      close: NormalizedOddsPoint;
+      current: NormalizedOddsPoint;
+    };
+    away: {
+      open: NormalizedOddsPoint;
+      close: NormalizedOddsPoint;
+      current: NormalizedOddsPoint;
+    };
+  };
+  total: {
+    over: {
+      open: NormalizedOddsPoint;
+      close: NormalizedOddsPoint;
+      current: NormalizedOddsPoint;
+    };
+    under: {
+      open: NormalizedOddsPoint;
+      close: NormalizedOddsPoint;
+      current: NormalizedOddsPoint;
+    };
+  };
+  favorite: string | null;
+  underdog: string | null;
+  lastUpdated: string | null;
+}
+
+export interface NormalizedGameStream {
+  isLive: boolean;
+  isReplayAvailable: boolean;
+  requires: {
+    espnPlus: boolean;
+    cableLogin: boolean;
+  };
+  links: {
+    web: string | null;
+    mobile: string | null;
+  };
+  broadcasts: Array<{
+    name: string;
+    type: string;
+    isNational: boolean;
+    slug: string | null;
+  }>;
+}
+
+export interface NormalizedGameTeam {
+  id: string;
+  name: string;
+  abbreviation: string;
+  score: number | null;
+  record: string | null;
+  logo: string | null;
+  logoDark: string | null;
+  color: string | null;
+  alternateColor: string | null;
+}
+
+export interface NormalizedScheduledGame {
+  league: League;
+  gameId: string;
+  status: "SCHEDULED" | "IN_PROGRESS" | "FINAL" | "UNKNOWN";
+  startTime: string | null;
+  summary: string | null;
+  period: number | null;
+  location: string | null;
+  teams: {
+    home: NormalizedGameTeam;
+    away: NormalizedGameTeam;
+  };
+  odds: NormalizedGameOdds | null;
+  stream: NormalizedGameStream;
+}
+
 export type ProjectionType = "batter" | "pitcher";
 
 export interface ProjectionRow {
@@ -166,4 +274,5 @@ export interface AutoBetSlip {
   odds: number;
   stake: number;
   edge: number;
+  confidence?: number;
 }

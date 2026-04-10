@@ -1,7 +1,8 @@
 import { queryAll } from "../../shared/db";
 import { getMockLineups } from "../../shared/mockData";
+import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { Env, InjuryRow, LineupRow } from "../../shared/types";
-import { json, methodNotAllowed, parseDate, withError } from "../../shared/utils";
+import { methodNotAllowed, parseDate, withError } from "../../shared/utils";
 
 export async function handleLineupsRequest(request: Request, env: Env): Promise<Response> {
   if (request.method !== "GET") {
@@ -24,10 +25,33 @@ export async function handleLineupsRequest(request: Request, env: Env): Promise<
       )) || [];
 
     if (lineups.length > 0 || injuries.length > 0) {
-      return json({ date, lineups, injuries }, 200, env);
+      const source = lineups.length > 0 && injuries.length > 0 ? "db" : "db_partial";
+      return jsonWithSourceMeta(
+        request,
+        { date, lineups, injuries },
+        {
+          route: "/lineups/mlb",
+          source,
+          tables: ["mlb_lineups", "mlb_injuries"],
+          notes: source === "db" ? "Lineups and injuries both resolved from D1." : "Only part of the lineup package resolved from D1."
+        },
+        200,
+        env
+      );
     }
 
-    return json({ date, ...getMockLineups(date) }, 200, env);
+    return jsonWithSourceMeta(
+      request,
+      { date, ...getMockLineups(date) },
+      {
+        route: "/lineups/mlb",
+        source: "mock",
+        tables: ["mlb_lineups", "mlb_injuries"],
+        notes: "No lineup or injury rows found in D1, so seeded lineup data was returned."
+      },
+      200,
+      env
+    );
   } catch (error) {
     return withError(error, env);
   }
