@@ -14,8 +14,125 @@ import { handleScheduleRequest, syncMlbScoreboardOdds } from "../../mlb-schedule
 import { handleSimRequest } from "../../mlb-sim/src/index";
 import { handleOptions, json, notFound, parseDate, withError } from "../../shared/utils";
 
+type SyncPhase = "live" | "pregame_hot" | "pregame_warm" | "recent_final" | "final_cold";
+
 function isBillingBypassed(env: Env): boolean {
   return (env.SSA_BILLING_BYPASS || "").toLowerCase() === "true";
+}
+
+function minutesUntil(now: Date, value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return (parsed.getTime() - now.getTime()) / (60 * 1000);
+}
+
+function classifySyncPhase(
+  game: {
+  status: string;
+  startTime: string | null;
+},
+  now: Date
+): SyncPhase {
+  const minutesToStart = minutesUntil(now, game.startTime);
+
+  if (game.status === "IN_PROGRESS") {
+    return "live";
+  }
+
+  if (game.status === "SCHEDULED") {
+    if (minutesToStart !== null && minutesToStart <= 60) {
+      return "pregame_hot";
+    }
+    return "pregame_warm";
+  }
+
+  if (game.status === "FINAL") {
+    if (minutesToStart !== null && minutesToStart >= -360) {
+      return "recent_final";
+    }
+    return "final_cold";
+  }
+
+  return "final_cold";
+}
+
+function shouldSyncPhase(phase: SyncPhase, now: Date): boolean {
+  const minute = now.getUTCMinutes();
+
+  switch (phase) {
+    case "live":
+      return true;
+    case "pregame_hot":
+      return minute % 5 === 0;
+    case "pregame_warm":
+      return minute % 15 === 0;
+    case "recent_final":
+      return minute % 30 === 0;
+    case "final_cold":
+    default:
+      return false;
+  }
+}
+
+function buildSyncPlan(
+  games: Array<{
+    gameId: string;
+    status: string;
+    summary: string | null;
+    startTime: string | null;
+    teams: { away: { abbreviation: string }; home: { abbreviation: string } };
+  }>,
+  now: Date
+) {
+  return games.map((game) => {
+    const phase = classifySyncPhase(game, now);
+    return {
+      gameId: game.gameId,
+      phase,
+      should_sync: shouldSyncPhase(phase, now),
+      status: game.status,
+      summary: game.summary,
+      startTime: game.startTime,
+      teams: {
+        away: game.teams.away.abbreviation,
+        home: game.teams.home.abbreviation
+      }
+    };
+  });
+}
+
+async function handleRoot(env: Env): Promise<Response> {
+  return json(
+    {
+      ok: true,
+      app: "SportsSenseAi",
+      service: "sportssenseai-api",
+      today: new Date().toISOString().slice(0, 10),
+      endpoints: {
+        health: "/health",
+        schedule: "/schedule/mlb?date=YYYY-MM-DD",
+        live: "/live/mlb?game_id={game_id}&date=YYYY-MM-DD&refresh=1",
+        game_odds: "/games/mlb/{game_id}/odds?date=YYYY-MM-DD",
+        odds_history: "/games/mlb/{game_id}/odds/history?date=YYYY-MM-DD&limit=24",
+        live_sync: "/admin/mlb/live-sync?date=YYYY-MM-DD&game_id={game_id}"
+      },
+      polling: MLB_LIVE_SYNC_PROFILE,
+      notes: [
+        "Use /health for a lightweight worker health check.",
+        "Use /schedule/mlb for the live slate and odds.",
+        "Use /live/mlb?refresh=1 for an on-demand ESPN summary refresh into mlb_live."
+      ]
+    },
+    200,
+    env
+  );
 }
 
 async function handleAuth(request: Request, env: Env): Promise<Response> {
@@ -258,17 +375,26 @@ async function handleAdminDataHealth(request: Request, env: Env): Promise<Respon
 
 async function runLiveSync(env: Env, dateParam?: string | null, gameId?: string | null) {
   const date = parseDate(dateParam);
+  const now = new Date();
   const scoreboard = await syncMlbScoreboardOdds(env, date, {
     gameIds: gameId ? [gameId] : undefined,
-    liveOpsOnly: !gameId,
-    now: new Date()
+    now,
+    shouldPersistGame: gameId
+      ? undefined
+      : (game) => {
+          const phase = classifySyncPhase(game, now);
+          return shouldSyncPhase(phase, now);
+        }
   });
-  const targetGameIds = gameId ? [gameId] : scoreboard.liveGames.map((game) => game.gameId);
+  const syncPlan = buildSyncPlan(scoreboard.discoveredGames, now);
+  const targetGameIds = gameId ? [gameId] : syncPlan.filter((game) => game.phase === "live").map((game) => game.gameId);
   const live = targetGameIds.length > 0 ? await syncMlbLiveGames(env, targetGameIds) : { synced_at: new Date().toISOString(), inserted: 0, games: [] };
 
   return {
     date,
+    now: now.toISOString(),
     scoreboard,
+    syncPlan,
     targetGameIds,
     live
   };
@@ -287,6 +413,7 @@ async function handleAdminLiveSync(request: Request, env: Env): Promise<Response
     request,
     {
       date: sync.date,
+      synced_at: sync.now,
       test_game_id: gameId,
       target_game_ids: sync.targetGameIds,
       polling: MLB_LIVE_SYNC_PROFILE,
@@ -306,6 +433,7 @@ async function handleAdminLiveSync(request: Request, env: Env): Promise<Response
         odds_snapshots_attempted: sync.scoreboard.oddsSnapshotsAttempted,
         odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
       },
+      sync_plan: sync.syncPlan,
       live_sync: sync.live
     },
     {
@@ -316,6 +444,7 @@ async function handleAdminLiveSync(request: Request, env: Env): Promise<Response
         "Internal live-ops route that discovers live MLB games from ESPN, persists scoreboard odds snapshots, and writes summary snapshots into mlb_live.",
       breakdown: {
         target_games: sync.targetGameIds.length,
+        scheduled_persist_games: sync.scoreboard.games.length,
         live_rows_inserted: sync.live.inserted,
         odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
       }
@@ -335,6 +464,7 @@ async function handleScheduledLiveSync(controller: ScheduledController, env: Env
       type: "mlb_live_sync",
       scheduled_for: new Date(controller.scheduledTime).toISOString(),
       date: sync.date,
+      sync_plan: sync.syncPlan,
       target_games: sync.targetGameIds,
       live_rows_inserted: sync.live.inserted,
       odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
@@ -353,6 +483,10 @@ export default {
     const path = url.pathname;
 
     try {
+      if (path === "/") {
+        return handleRoot(env);
+      }
+
       if (path === "/health") {
         const calibrationRow = await queryFirst<CalibrationRow>(
           env,

@@ -317,6 +317,7 @@ export async function syncMlbScoreboardOdds(
     gameIds?: string[];
     liveOpsOnly?: boolean;
     now?: Date;
+    shouldPersistGame?: (game: NormalizedScheduledGame) => boolean;
   } = {}
 ): Promise<{
   date: string;
@@ -339,6 +340,10 @@ export async function syncMlbScoreboardOdds(
 
     if (options.liveOpsOnly) {
       return isLiveOpsEligible(game, now);
+    }
+
+    if (options.shouldPersistGame && !options.shouldPersistGame(game)) {
+      return false;
     }
 
     return true;

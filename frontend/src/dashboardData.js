@@ -44,6 +44,62 @@ function getPrimaryGameId(schedule, simulation, contexts) {
   );
 }
 
+function minutesUntilStart(startTime) {
+  if (!startTime) {
+    return null;
+  }
+
+  const parsed = new Date(startTime);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return (parsed.getTime() - Date.now()) / (60 * 1000);
+}
+
+function getRefreshCadence(schedule, selectedDate) {
+  if (selectedDate !== todayIso()) {
+    return null;
+  }
+
+  const games = schedule?.games || [];
+  if (games.some((game) => game.status === "IN_PROGRESS")) {
+    return {
+      mode: "live",
+      scheduleMs: 30000,
+      liveMs: 15000
+    };
+  }
+
+  if (
+    games.some((game) => game.status === "SCHEDULED" && minutesUntilStart(game.startTime) !== null && minutesUntilStart(game.startTime) <= 60)
+  ) {
+    return {
+      mode: "pregame_hot",
+      scheduleMs: 60000,
+      liveMs: null
+    };
+  }
+
+  if (games.some((game) => game.status === "SCHEDULED")) {
+    return {
+      mode: "pregame_warm",
+      scheduleMs: 300000,
+      liveMs: null
+    };
+  }
+
+  if (games.some((game) => game.status === "FINAL")) {
+    return {
+      mode: "final",
+      scheduleMs: 900000,
+      liveMs: null
+    };
+  }
+
+  return null;
+}
+
 export function useSlateBundle(selectedDate) {
   const [state, setState] = useState(initialState);
 
@@ -119,11 +175,12 @@ export function useSlateBundle(selectedDate) {
   }, [selectedDate]);
 
   const liveGameId = state.schedule?.games?.find((game) => game.status === "IN_PROGRESS")?.gameId || null;
+  const cadence = getRefreshCadence(state.schedule, selectedDate);
 
   useEffect(() => {
     let active = true;
 
-    if (selectedDate !== todayIso() || !liveGameId) {
+    if (!cadence) {
       return () => {
         active = false;
       };
@@ -151,15 +208,20 @@ export function useSlateBundle(selectedDate) {
       }
     }
 
-    const liveTimer = setInterval(refreshLive, 15000);
-    const scheduleTimer = setInterval(refreshSchedule, 30000);
+    const liveTimer =
+      cadence.liveMs && liveGameId
+        ? setInterval(refreshLive, cadence.liveMs)
+        : null;
+    const scheduleTimer = setInterval(refreshSchedule, cadence.scheduleMs);
 
     return () => {
       active = false;
-      clearInterval(liveTimer);
+      if (liveTimer) {
+        clearInterval(liveTimer);
+      }
       clearInterval(scheduleTimer);
     };
-  }, [liveGameId, selectedDate]);
+  }, [cadence, liveGameId, selectedDate]);
 
   return state;
 }

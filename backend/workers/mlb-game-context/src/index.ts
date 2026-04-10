@@ -54,14 +54,39 @@ export const MLB_LIVE_SYNC_PROFILE = {
   implemented_now: {
     manual_route: "/admin/mlb/live-sync",
     app: {
-      schedule_refresh_ms: 30000,
-      live_snapshot_refresh_ms: 15000
+      live_schedule_refresh_ms: 30000,
+      live_snapshot_refresh_ms: 15000,
+      pregame_hot_schedule_refresh_ms: 60000,
+      pregame_warm_schedule_refresh_ms: 300000,
+      final_schedule_refresh_ms: 900000
     }
   },
   configured_cron_target: {
     expression: "*/1 * * * *",
     status: "blocked_by_cloudflare_account_limit",
     note: "Production could not attach the trigger because this Cloudflare account is already at the 5-cron-trigger limit."
+  },
+  server_phase_rules: {
+    live: {
+      sync_every_minutes: 1,
+      scope: "Persist scoreboard odds and refresh mlb_live summary snapshots."
+    },
+    pregame_hot: {
+      sync_every_minutes: 5,
+      scope: "Games starting within 60 minutes."
+    },
+    pregame_warm: {
+      sync_every_minutes: 15,
+      scope: "Games starting later today or later in the board window."
+    },
+    recent_final: {
+      sync_every_minutes: 30,
+      scope: "Recently completed games kept warm for late corrections and closeout odds history."
+    },
+    final_cold: {
+      sync_every_minutes: null,
+      scope: "No routine sync after the recent final window."
+    }
   },
   target_profile: {
     play_by_play_ms: 5000,
