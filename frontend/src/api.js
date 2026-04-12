@@ -36,6 +36,34 @@ export function getSchedule(date) {
   return readJson(`/api/schedule/mlb?date=${date}`);
 }
 
+export function getPregame(date, options = {}) {
+  return readJson(`/api/pregame/mlb${buildQuery({ date, ...options })}`);
+}
+
+export function getGamePreview(gameId, options = {}) {
+  return readJson(`/api/games/mlb/${gameId}/preview${buildQuery(options)}`);
+}
+
+export function getGamecast(gameId, options = {}) {
+  return readJson(`/api/games/mlb/${gameId}/gamecast${buildQuery(options)}`);
+}
+
+export function getWeather(date, options = {}) {
+  return readJson(`/api/weather/mlb${buildQuery({ date, ...options })}`);
+}
+
+export function getPitchers(options = {}) {
+  return readJson(`/api/pitchers/mlb${buildQuery(options)}`);
+}
+
+export function getPitcher(playerId, options = {}) {
+  return readJson(`/api/pitchers/mlb/${playerId}${buildQuery(options)}`);
+}
+
+export function getPitcherSplits(playerId, options = {}) {
+  return readJson(`/api/pitchers/mlb/${playerId}/splits${buildQuery(options)}`);
+}
+
 export function getGameOddsHistory(gameId, options = {}) {
   return readJson(`/api/games/mlb/${gameId}/odds/history${buildQuery(options)}`);
 }

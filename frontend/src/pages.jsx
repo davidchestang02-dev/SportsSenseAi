@@ -22,7 +22,16 @@ import {
 
 import { askAi, getGameOddsHistory, getGameOddsMovement } from "./api";
 import { getTeamLabel } from "./media";
-import { usePlayerResearch, useResearchSlate, useTeamResearch } from "./researchData";
+import {
+  useGamePreview,
+  usePitcherLeaderboard,
+  usePitcherProfile,
+  usePlayerResearch,
+  usePregameSlate,
+  useResearchSlate,
+  useTeamResearch,
+  useWeather
+} from "./researchData";
 import {
   EmptyState,
   fmtDecimal,
@@ -258,6 +267,22 @@ function buildScheduleOddsRows(games) {
         totalLine
       };
     });
+}
+
+function buildBookComparisonRows(games) {
+  return (games || [])
+    .filter((game) => Array.isArray(game?.books) && game.books.length > 0)
+    .flatMap((game) =>
+      game.books.map((book) => ({
+        gameId: game.gameId,
+        matchup: scheduleMatchupLabel(game),
+        book: book.book,
+        moneyline: `${game.teams?.away?.abbreviation || "Away"} ${fmtOptionalMoneyline(book.moneyline?.away)} / ${game.teams?.home?.abbreviation || "Home"} ${fmtOptionalMoneyline(book.moneyline?.home)}`,
+        spread: `${fmtLine(book.spread?.line, true)} (${fmtOptionalMoneyline(book.spread?.homeOdds)}/${fmtOptionalMoneyline(book.spread?.awayOdds)})`,
+        total: `${fmtLine(book.total?.line)} (${fmtOptionalMoneyline(book.total?.overOdds)}/${fmtOptionalMoneyline(book.total?.underOdds)})`,
+        updatedAt: book.updatedAt
+      }))
+    );
 }
 
 function buildScheduleSummary(games) {
@@ -1183,6 +1208,7 @@ export function TeamsPage({ selectedDate }) {
 
 export function GamesPage({ data, selectedDate }) {
   const slate = useResearchSlate(selectedDate);
+  const pregame = usePregameSlate(selectedDate);
   const [selectedGamePk, setSelectedGamePk] = useState(null);
   const [selectedScheduleGameId, setSelectedScheduleGameId] = useState(null);
 
@@ -1206,9 +1232,10 @@ export function GamesPage({ data, selectedDate }) {
 
   const games = slate.data?.games || [];
   const matchup = games.find((game) => Number(game.gamePk) === Number(selectedGamePk)) || firstOrNull(games);
-  const scheduleGames = data.schedule?.games || [];
+  const scheduleGames = data.schedule?.games?.length > 0 ? data.schedule.games : pregame.data?.games || [];
   const featuredScheduleGame =
     scheduleGames.find((game) => String(game.gameId) === String(selectedScheduleGameId)) || firstOrNull(scheduleGames);
+  const featuredPreview = useGamePreview(featuredScheduleGame?.gameId, selectedDate);
   const awayResearch = useTeamResearch(matchup?.awayTeam?.id, selectedDate);
   const homeResearch = useTeamResearch(matchup?.homeTeam?.id, selectedDate);
   const awayStarter = usePlayerResearch(matchup?.probablePitchers?.away?.id, selectedDate, matchup?.homeTeam?.id, null);
@@ -1220,6 +1247,8 @@ export function GamesPage({ data, selectedDate }) {
   const oddsInsights = useGameOddsInsights(featuredScheduleGame?.gameId, selectedDate);
   const oddsHistorySeries = buildOddsHistorySeries(oddsInsights.history);
   const scheduleRoute = getRouteAudit(data.dataHealth, "/schedule/mlb");
+  const pregameRoute = getRouteAudit(data.dataHealth, "/pregame/mlb");
+  const previewRoute = getRouteAudit(data.dataHealth, "/games/mlb/:gameId/preview");
   const gameOddsRoute = getRouteAudit(data.dataHealth, "/games/mlb/:gameId/odds");
   const gameOddsHistoryRoute = getRouteAudit(data.dataHealth, "/games/mlb/:gameId/odds/history");
   const gameOddsMovementRoute = getRouteAudit(data.dataHealth, "/games/mlb/:gameId/odds/movement");
@@ -1237,6 +1266,7 @@ export function GamesPage({ data, selectedDate }) {
 
       {slate.loading ? <ResearchLoading message="Loading official MLB scoreboard..." /> : null}
       {slate.error ? <div className="warning-banner">Matchup slate warning: {slate.error}</div> : null}
+      {pregame.error ? <div className="warning-banner">Pregame slate warning: {pregame.error}</div> : null}
 
       <PagePanel
         eyebrow="Live scoreboard"
@@ -1273,6 +1303,48 @@ export function GamesPage({ data, selectedDate }) {
                     note={featuredScheduleGame.location || "Venue TBD"}
                   />
                 </div>
+
+                <PagePanel
+                  eyebrow="Pregame foundation"
+                  title="Persisted preview and probable starter layer"
+                  description="This layer now reads from the dedicated pregame and preview services, so matchup pages can rely on stored slate context instead of one-off fetches."
+                  action={<SourceBadge route={previewRoute || pregameRoute} />}
+                >
+                  {featuredPreview.loading ? (
+                    <ResearchLoading message="Loading persisted game preview..." />
+                  ) : featuredPreview.data?.data ? (
+                    <div className="detail-grid">
+                      <div className="detail-card">
+                        <span className="detail-label">Venue context</span>
+                        <strong className="detail-card-value">{featuredPreview.data.data.game?.venue?.name || featuredScheduleGame.location || "Venue TBD"}</strong>
+                        <p>
+                          {[featuredPreview.data.data.game?.venue?.city, featuredPreview.data.data.game?.venue?.state].filter(Boolean).join(", ") || "City context pending"}
+                        </p>
+                      </div>
+                      <div className="detail-card">
+                        <span className="detail-label">Probables</span>
+                        <strong className="detail-card-value">
+                          {featuredPreview.data.data.game?.probablePitchers?.away?.name || "TBD"} / {featuredPreview.data.data.game?.probablePitchers?.home?.name || "TBD"}
+                        </strong>
+                        <p>Persisted from the ESPN pregame slate</p>
+                      </div>
+                      <div className="detail-card">
+                        <span className="detail-label">Statcast hitters</span>
+                        <strong className="detail-card-value">
+                          {(featuredPreview.data.data.preview?.hittersAway?.length || 0) + (featuredPreview.data.data.preview?.hittersHome?.length || 0)}
+                        </strong>
+                        <p>{featuredPreview.data.data.preview ? "Preview payload available" : "Preview payload pending"}</p>
+                      </div>
+                      <div className="detail-card">
+                        <span className="detail-label">Weather lens</span>
+                        <strong className="detail-card-value">{featuredPreview.data.data.weather?.stoplight?.toUpperCase?.() || "PENDING"}</strong>
+                        <p>{featuredPreview.data.data.weather?.park || "Weather center will populate from persisted rows"}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <EmptyState>No persisted preview is available for this game yet.</EmptyState>
+                  )}
+                </PagePanel>
 
                 <div className="two-column">
                   <PagePanel
@@ -1906,11 +1978,226 @@ export function PlayersPage({ data, selectedDate }) {
   );
 }
 
+export function PitchersPage({ selectedDate }) {
+  const leaderboard = usePitcherLeaderboard(selectedDate, { sort: "era", limit: 60 });
+  const [selectedPitcherId, setSelectedPitcherId] = useState("");
+
+  useEffect(() => {
+    if (!selectedPitcherId && leaderboard.data?.pitchers?.length > 0) {
+      setSelectedPitcherId(String(leaderboard.data.pitchers[0].espnPlayerId));
+    }
+  }, [selectedPitcherId, leaderboard.data]);
+
+  const selectedPitcher =
+    (leaderboard.data?.pitchers || []).find((pitcher) => String(pitcher.espnPlayerId) === String(selectedPitcherId)) ||
+    firstOrNull(leaderboard.data?.pitchers || []);
+  const pitcherProfile = usePitcherProfile(selectedPitcher?.espnPlayerId, selectedDate);
+
+  return (
+    <div className="page-shell">
+      <section className="research-hero">
+        <div>
+          <span className="section-eyebrow">Pitcher center</span>
+          <h2>{selectedPitcher ? selectedPitcher.name : "MLB pitcher board"}</h2>
+          <p>ESPN leaderboard, roster metadata, and Core splits are now persisted into D1 so we can study starters and relievers without recomputing the stack on every view.</p>
+        </div>
+      </section>
+
+      {leaderboard.loading ? <ResearchLoading message="Loading pitcher leaderboard..." /> : null}
+      {leaderboard.error ? <div className="warning-banner">Pitcher warning: {leaderboard.error}</div> : null}
+
+      <div className="two-column">
+        <PagePanel eyebrow="Leaderboard" title="Season pitcher table" description="ERA-sorted board from the persisted pitcher table with the core fields we need for game previews and modeling.">
+          {(leaderboard.data?.pitchers || []).length > 0 ? (
+            <div className="table-shell table-shell--dense">
+              <div className="table-row table-row--header table-row--market">
+                <span>Pitcher</span>
+                <span>Team</span>
+                <span>ERA</span>
+                <span>WHIP</span>
+                <span>K</span>
+                <span>IP</span>
+                <span>WAR</span>
+                <span>Action</span>
+              </div>
+              {(leaderboard.data?.pitchers || []).map((pitcher) => (
+                <div key={pitcher.espnPlayerId} className="table-row table-row--market">
+                  <strong>{pitcher.name}</strong>
+                  <span>{pitcher.teamAbbr || "--"}</span>
+                  <span>{pitcher.era ?? "--"}</span>
+                  <span>{pitcher.whip ?? "--"}</span>
+                  <span>{pitcher.k ?? "--"}</span>
+                  <span>{pitcher.ip ?? "--"}</span>
+                  <span>{pitcher.war ?? "--"}</span>
+                  <button className="team-toggle" type="button" onClick={() => setSelectedPitcherId(String(pitcher.espnPlayerId))}>
+                    Open
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState>No pitcher rows have been ingested yet.</EmptyState>
+          )}
+        </PagePanel>
+
+        <PagePanel eyebrow="Profile" title="Pitcher detail panel" description="Season summary, derived model rates, and stored ESPN splits for the selected pitcher.">
+          {pitcherProfile.loading ? (
+            <ResearchLoading message="Loading pitcher profile..." />
+          ) : pitcherProfile.data?.pitcher ? (
+            <div className="stack-block">
+              <div className="player-summary">
+                <PlayerPortrait player={{ fullName: pitcherProfile.data.pitcher.name, headshotUrl: pitcherProfile.data.pitcher.headshotUrl }} />
+                <div>
+                  <strong>{pitcherProfile.data.pitcher.name}</strong>
+                  <small>
+                    {pitcherProfile.data.pitcher.teamAbbr || "Team TBD"} | {pitcherProfile.data.pitcher.throws || "--"} | {pitcherProfile.data.pitcher.pos || "P"}
+                  </small>
+                </div>
+              </div>
+
+              <div className="detail-grid">
+                <div className="detail-card">
+                  <span className="detail-label">ERA / WHIP</span>
+                  <strong className="detail-card-value">
+                    {pitcherProfile.data.pitcher.era ?? "--"} / {pitcherProfile.data.pitcher.whip ?? "--"}
+                  </strong>
+                  <p>Season run prevention</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">K/9 / BB/9</span>
+                  <strong className="detail-card-value">
+                    {pitcherProfile.data.pitcher.k9 ?? "--"} / {pitcherProfile.data.pitcher.bb9 ?? "--"}
+                  </strong>
+                  <p>Miss-bat and control profile</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Derived K% / BB%</span>
+                  <strong className="detail-card-value">
+                    {fmtPercent(pitcherProfile.data.pitcher.model?.kPct || 0)} / {fmtPercent(pitcherProfile.data.pitcher.model?.bbPct || 0)}
+                  </strong>
+                  <p>Read-layer pitcher model</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Derived FIP</span>
+                  <strong className="detail-card-value">{pitcherProfile.data.pitcher.model?.fip ?? "--"}</strong>
+                  <p>Calculated from stored stat line</p>
+                </div>
+              </div>
+
+              <div className="table-shell table-shell--dense">
+                <div className="table-row table-row--header table-row--movement">
+                  <span>Split</span>
+                  <span>ERA</span>
+                  <span>WHIP</span>
+                  <span>K/9</span>
+                  <span>IP</span>
+                </div>
+                {(pitcherProfile.data.pitcher.splits || []).slice(0, 10).map((split) => (
+                  <div key={`${split.splitCode}-${split.splitLabel}`} className="table-row table-row--movement">
+                    <strong>{split.splitLabel || split.splitCode}</strong>
+                    <span>{split.era ?? "--"}</span>
+                    <span>{split.whip ?? "--"}</span>
+                    <span>{split.k9 ?? "--"}</span>
+                    <span>{split.ip ?? "--"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState>Select a pitcher to open the full profile.</EmptyState>
+          )}
+        </PagePanel>
+      </div>
+    </div>
+  );
+}
+
+export function WeatherPage({ selectedDate }) {
+  const weather = useWeather(selectedDate);
+
+  return (
+    <div className="page-shell">
+      <section className="research-hero">
+        <div>
+          <span className="section-eyebrow">Weather center</span>
+          <h2>MLB weather research surface</h2>
+          <p>Park, stoplight, environment, and game-window weather context now read from persisted backend tables instead of one-off fetches.</p>
+        </div>
+      </section>
+
+      {weather.loading ? <ResearchLoading message="Loading MLB weather board..." /> : null}
+      {weather.error ? <div className="warning-banner">Weather warning: {weather.error}</div> : null}
+
+      {(weather.data?.games || []).length > 0 ? (
+        <div className="list-stack">
+          {(weather.data?.games || []).map((game) => (
+            <PagePanel
+              key={game.gameId}
+              eyebrow="Game weather"
+              title={`${game.awayTeam} at ${game.homeTeam}`}
+              description={`${game.park || "Park TBD"}${game.city ? ` • ${game.city}` : ""}${game.state ? `, ${game.state}` : ""}`}
+            >
+              <div className="detail-grid">
+                <div className="detail-card">
+                  <span className="detail-label">Stoplight</span>
+                  <strong className="detail-card-value">{String(game.stoplight || "pending").toUpperCase()}</strong>
+                  <p>{game.firstPitchLocal ? formatGameTime(game.firstPitchLocal) : "First pitch pending"}</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Run / HR env</span>
+                  <strong className="detail-card-value">
+                    {fmtDecimal(game.environment?.runEnvIndex)} / {fmtDecimal(game.environment?.hrEnvIndex)}
+                  </strong>
+                  <p>Persisted environment layer</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Temp / Wind</span>
+                  <strong className="detail-card-value">
+                    {game.hourly?.[0]?.tempF ?? "--"}° / {game.hourly?.[0]?.windSpeed ?? "--"} mph
+                  </strong>
+                  <p>{game.hourly?.[0]?.conditions || "Condition pending"}</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Source</span>
+                  <strong className="detail-card-value">{game.hourly?.[0]?.source || "--"}</strong>
+                  <p>Research-facing weather origin</p>
+                </div>
+              </div>
+
+              <div className="table-shell table-shell--dense">
+                <div className="table-row table-row--header table-row--movement">
+                  <span>Window</span>
+                  <span>Conditions</span>
+                  <span>Temp</span>
+                  <span>Wind</span>
+                  <span>Cloud / Humidity</span>
+                </div>
+                {(game.hourly || []).map((hour) => (
+                  <div key={`${game.gameId}-${hour.timeLabel}`} className="table-row table-row--movement">
+                    <strong>{hour.timeLabel}</strong>
+                    <span>{hour.conditions || "--"}</span>
+                    <span>{hour.tempF ?? "--"}</span>
+                    <span>{hour.windSpeed ?? "--"} @ {hour.windDirDeg ?? "--"}</span>
+                    <span>{hour.cloudCover ?? "--"}</span>
+                  </div>
+                ))}
+              </div>
+            </PagePanel>
+          ))}
+        </div>
+      ) : (
+        <EmptyState>No persisted weather rows are available for this slate yet.</EmptyState>
+      )}
+    </div>
+  );
+}
+
 export function MarketsPage({ data }) {
   const scheduleGames = data.schedule?.games || [];
   const oddsRows = buildScheduleOddsRows(scheduleGames);
   const oddsSummary = buildScheduleSummary(scheduleGames);
   const movementRows = buildLineMovementRows(scheduleGames);
+  const bookRows = buildBookComparisonRows(scheduleGames);
   const marketRows = buildMarketRows(data.markets || []);
   const riskRecommendations = data.risk?.recommendations || [];
   const slips = data.autobet?.slips || [];
@@ -1976,6 +2263,38 @@ export function MarketsPage({ data }) {
           </div>
         ) : (
           <EmptyState>No live game odds are available yet for this slate.</EmptyState>
+        )}
+      </PagePanel>
+
+      <PagePanel
+        eyebrow="Multi-book"
+        title="Merged sportsbook ledger"
+        description="The new unified odds layer stores book-specific game prices under the hood, so we can compare ESPN-fallback lines with any matched sportsbook rows."
+        action={<SourceBadge route={gameOddsRoute} />}
+      >
+        {bookRows.length > 0 ? (
+          <div className="table-shell table-shell--dense">
+            <div className="table-row table-row--header table-row--game-odds">
+              <span>Matchup</span>
+              <span>Book</span>
+              <span>Moneyline</span>
+              <span>Spread</span>
+              <span>Total</span>
+              <span>Updated</span>
+            </div>
+            {bookRows.slice(0, 18).map((row, index) => (
+              <div key={`${row.gameId}-${row.book}-${index}`} className="table-row table-row--game-odds">
+                <strong>{row.matchup}</strong>
+                <span>{row.book}</span>
+                <span>{row.moneyline}</span>
+                <span>{row.spread}</span>
+                <span>{row.total}</span>
+                <span>{row.updatedAt ? formatOddsTimestamp(row.updatedAt) : "--"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState>Multi-book game rows have not been captured for this slate yet.</EmptyState>
         )}
       </PagePanel>
 
@@ -2174,6 +2493,7 @@ export function MarketsPage({ data }) {
 
 export function LivePage({ data, selectedDate }) {
   const liveSnapshot = data.live?.snapshot || data.live || null;
+  const gamecast = data.live?.gamecast || null;
   const liveGameId = data.live?.game_id || liveSnapshot?.game_id;
   const liveContext = (data.contexts || []).find((context) => context.game_id === liveGameId) || firstOrNull(data.contexts || []);
   const pitchTimeline = buildPitchTimeline(data.live);
@@ -2193,11 +2513,42 @@ export function LivePage({ data, selectedDate }) {
       {liveSnapshot ? (
         <>
           <div className="metric-grid">
-            <MetricCard label="Inning" value={`${liveSnapshot.inning_half} ${liveSnapshot.inning}`} note={`Slate date ${selectedDate}`} />
+            <MetricCard label="Inning" value={gamecast ? `${gamecast.status?.progress?.half || "--"} ${gamecast.status?.progress?.inning || "--"}` : `${liveSnapshot.inning_half} ${liveSnapshot.inning}`} note={`Slate date ${selectedDate}`} />
             <MetricCard label="Score" value={`${liveSnapshot.away_score}-${liveSnapshot.home_score}`} note={liveContext ? `${liveContext.away_team} at ${liveContext.home_team}` : "Tracked game"} />
-            <MetricCard label="Count" value={`${liveSnapshot.balls}-${liveSnapshot.strikes}`} note={`${liveSnapshot.outs} outs`} />
+            <MetricCard label="Count" value={gamecast ? `${gamecast.situation?.balls ?? liveSnapshot.balls}-${gamecast.situation?.strikes ?? liveSnapshot.strikes}` : `${liveSnapshot.balls}-${liveSnapshot.strikes}`} note={`${gamecast?.situation?.outs ?? liveSnapshot.outs} outs`} />
             <MetricCard label="Win prob" value={fmtPercent(liveSnapshot.win_probability_home)} note="Home side live snapshot" />
           </div>
+
+          {gamecast ? (
+            <PagePanel eyebrow="Gamecast" title="Normalized live game object" description="The live page now reads the richer Gamecast state with inning-by-inning scoring, matchup, and persisted sportsbook context.">
+              <div className="detail-grid">
+                <div className="detail-card">
+                  <span className="detail-label">Status</span>
+                  <strong className="detail-card-value">{gamecast.status?.detail || "Live"}</strong>
+                  <p>{gamecast.meta?.venue || "Venue pending"}</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Current matchup</span>
+                  <strong className="detail-card-value">{gamecast.currentMatchup?.batter?.displayName || gamecast.currentMatchup?.batter?.fullName || "Batter pending"}</strong>
+                  <p>{gamecast.currentMatchup?.pitcher?.displayName || gamecast.currentMatchup?.pitcher?.fullName || "Pitcher pending"}</p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Preferred book</span>
+                  <strong className="detail-card-value">{gamecast.odds?.preferredBook?.book || "Pending"}</strong>
+                  <p>
+                    {gamecast.odds?.preferredBook
+                      ? `${fmtOptionalMoneyline(gamecast.odds.preferredBook.moneyline?.away)} / ${fmtOptionalMoneyline(gamecast.odds.preferredBook.moneyline?.home)}`
+                      : "No persisted live book row"}
+                  </p>
+                </div>
+                <div className="detail-card">
+                  <span className="detail-label">Plays tracked</span>
+                  <strong className="detail-card-value">{gamecast.plays?.length || 0}</strong>
+                  <p>Recent Gamecast ledger persisted in D1</p>
+                </div>
+              </div>
+            </PagePanel>
+          ) : null}
 
           <div className="two-column">
             <PagePanel eyebrow="Pitch rhythm" title="Recent pitch-speed timeline" description="Most recent pitches in order, using the event feed when live rows are available." action={<SourceBadge route={getRouteAudit(data.dataHealth, "/live/mlb")} />}>

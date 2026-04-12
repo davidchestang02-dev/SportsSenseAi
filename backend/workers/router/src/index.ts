@@ -1,271 +1,23 @@
-import { execute, queryFirst } from "../../shared/db";
+import OpenAI from "openai";
+import { execute, queryAll, queryFirst } from "../../shared/db";
 import { getDataHealthSnapshot } from "../../shared/dataContracts";
 import { hashPassword, requireToken, signToken } from "../../shared/auth";
 import { getMockCalibration, getMockSlate } from "../../shared/mockData";
-import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { CalibrationRow, Env } from "../../shared/types";
 import { handleAutoBetRequest } from "../../mlb-autobet/src/index";
 import { handleGameContextRequest, MLB_LIVE_SYNC_PROFILE, syncMlbLiveGames } from "../../mlb-game-context/src/index";
 import { handleLineupsRequest } from "../../mlb-lineups/src/index";
 import { handleMarketMakerRequest } from "../../mlb-market-maker/src/index";
+import { handlePitchersRequest } from "../../mlb-pitchers/src/index";
+import { handlePregameRequest, syncPregameSlate } from "../../mlb-pregame/src/index";
 import { handleResearchRequest } from "../../mlb-research/src/index";
 import { handleRiskEngineRequest } from "../../mlb-risk-engine/src/index";
 import { handleScheduleRequest, syncMlbScoreboardOdds } from "../../mlb-schedule/src/index";
 import { handleSimRequest } from "../../mlb-sim/src/index";
 import { handleOptions, json, notFound, parseDate, withError } from "../../shared/utils";
 
-type SyncPhase = "live" | "pregame_daily" | "pregame_prelock" | "recent_final" | "final_archive" | "idle";
-
-type SyncPhasePlan = {
-  gameId: string;
-  phase: SyncPhase;
-  should_sync: boolean;
-  status: string;
-  summary: string | null;
-  startTime: string | null;
-  teams: {
-    away: string;
-    home: string;
-  };
-};
-
 function isBillingBypassed(env: Env): boolean {
   return (env.SSA_BILLING_BYPASS || "").toLowerCase() === "true";
-}
-
-function minutesUntil(now: Date, value: string | null | undefined): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return (parsed.getTime() - now.getTime()) / (60 * 1000);
-}
-
-function getEasternClock(now: Date) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-
-  const values = formatter
-    .formatToParts(now)
-    .reduce<Record<string, string>>((accumulator, part) => {
-      if (part.type !== "literal") {
-        accumulator[part.type] = part.value;
-      }
-      return accumulator;
-    }, {});
-
-  return {
-    year: Number(values.year || 0),
-    month: Number(values.month || 0),
-    day: Number(values.day || 0),
-    hour: Number(values.hour || 0),
-    minute: Number(values.minute || 0)
-  };
-}
-
-function getEasternDate(now: Date): string {
-  const eastern = getEasternClock(now);
-  return `${String(eastern.year).padStart(4, "0")}-${String(eastern.month).padStart(2, "0")}-${String(eastern.day).padStart(2, "0")}`;
-}
-
-function getScheduledSportsDate(now: Date): string {
-  const eastern = getEasternClock(now);
-  if (eastern.hour < 3 || isFinalArchiveWindow(now)) {
-    return getEasternDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-  }
-
-  return getEasternDate(now);
-}
-
-function isMorningPregameRefresh(now: Date): boolean {
-  const eastern = getEasternClock(now);
-  return eastern.hour === 11 && eastern.minute < 2;
-}
-
-function isFinalArchiveWindow(now: Date): boolean {
-  const eastern = getEasternClock(now);
-  return eastern.hour === 3 && eastern.minute < 2;
-}
-
-function isMinuteOpsWindow(now: Date): boolean {
-  const eastern = getEasternClock(now);
-  return eastern.hour >= 12 || eastern.hour <= 2;
-}
-
-function isPregamePrelock(minutesToStart: number | null): boolean {
-  return minutesToStart !== null && minutesToStart <= 60.5 && minutesToStart > 58;
-}
-
-function classifyPersistencePhase(
-  game: {
-    status: string;
-    startTime: string | null;
-  },
-  now: Date
-): SyncPhase {
-  const minutesToStart = minutesUntil(now, game.startTime);
-
-  if (game.status === "IN_PROGRESS") {
-    return "live";
-  }
-
-  if (game.status === "SCHEDULED") {
-    if (isMorningPregameRefresh(now)) {
-      return "pregame_daily";
-    }
-
-    if (isPregamePrelock(minutesToStart)) {
-      return "pregame_prelock";
-    }
-
-    return "idle";
-  }
-
-  if (game.status === "FINAL" && isFinalArchiveWindow(now)) {
-    return "final_archive";
-  }
-
-  return "idle";
-}
-
-function shouldSyncPhase(phase: SyncPhase): boolean {
-  return phase !== "idle";
-}
-
-async function wasTrackedRecently(env: Env, gameId: string, now: Date, windowMinutes: number): Promise<boolean> {
-  if (!env.DB) {
-    return false;
-  }
-
-  const row =
-    (await queryFirst<{ latest_timestamp: string | null }>(
-      env,
-      `SELECT MAX(entry_time) AS latest_timestamp
-       FROM (
-         SELECT MAX(created_at) AS entry_time FROM mlb_live WHERE game_id = ?
-         UNION ALL
-         SELECT MAX(timestamp) AS entry_time FROM mlb_odds_history WHERE game_id = ?
-       )`,
-      [gameId, gameId]
-    )) || null;
-
-  if (!row?.latest_timestamp) {
-    return false;
-  }
-
-  const latest = new Date(row.latest_timestamp);
-  if (Number.isNaN(latest.getTime())) {
-    return false;
-  }
-
-  return now.getTime() - latest.getTime() <= windowMinutes * 60 * 1000;
-}
-
-async function getRecentlyTrackedFinals(
-  env: Env,
-  games: Array<{
-    gameId: string;
-    status: string;
-  }>,
-  now: Date
-) {
-  const finalGames = games.filter((game) => game.status === "FINAL");
-  const recentFlags = await Promise.all(
-    finalGames.map(async (game) => ({
-      gameId: game.gameId,
-      recent: await wasTrackedRecently(env, game.gameId, now, 2)
-    }))
-  );
-
-  return new Set(recentFlags.filter((game) => game.recent).map((game) => game.gameId));
-}
-
-function classifySyncPhase(
-  game: {
-    gameId: string;
-    status: string;
-    startTime: string | null;
-  },
-  now: Date,
-  recentlyTrackedFinals: Set<string>
-): SyncPhase {
-  const persistencePhase = classifyPersistencePhase(game, now);
-  if (persistencePhase !== "idle") {
-    return persistencePhase;
-  }
-
-  if (game.status === "FINAL" && recentlyTrackedFinals.has(game.gameId)) {
-    return "recent_final";
-  }
-
-  return "idle";
-}
-
-function buildSyncPlan(
-  games: Array<{
-    gameId: string;
-    status: string;
-    summary: string | null;
-    startTime: string | null;
-    teams: { away: { abbreviation: string }; home: { abbreviation: string } };
-  }>,
-  now: Date,
-  recentlyTrackedFinals: Set<string>
-) {
-  return games.map<SyncPhasePlan>((game) => {
-    const phase = classifySyncPhase(game, now, recentlyTrackedFinals);
-    return {
-      gameId: game.gameId,
-      phase,
-      should_sync: shouldSyncPhase(phase),
-      status: game.status,
-      summary: game.summary,
-      startTime: game.startTime,
-      teams: {
-        away: game.teams.away.abbreviation,
-        home: game.teams.home.abbreviation
-      }
-    };
-  });
-}
-
-async function handleRoot(env: Env): Promise<Response> {
-  return json(
-    {
-      ok: true,
-      app: "SportsSenseAi",
-      service: "sportssenseai-api",
-      today: new Date().toISOString().slice(0, 10),
-      endpoints: {
-        health: "/health",
-        schedule: "/schedule/mlb?date=YYYY-MM-DD",
-        live: "/live/mlb?game_id={game_id}&date=YYYY-MM-DD&refresh=1",
-        game_odds: "/games/mlb/{game_id}/odds?date=YYYY-MM-DD",
-        odds_history: "/games/mlb/{game_id}/odds/history?date=YYYY-MM-DD&limit=24",
-        live_sync: "/admin/mlb/live-sync?date=YYYY-MM-DD&game_id={game_id}"
-      },
-      polling: MLB_LIVE_SYNC_PROFILE,
-      notes: [
-        "Use /health for a lightweight worker health check.",
-        "Use /schedule/mlb for the live slate and odds.",
-        "Use /live/mlb?refresh=1 for an on-demand ESPN summary refresh into mlb_live."
-      ]
-    },
-    200,
-    env
-  );
 }
 
 async function handleAuth(request: Request, env: Env): Promise<Response> {
@@ -405,6 +157,8 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
     return json({ error: "Method not allowed" }, 405, env);
   }
 
+  console.log("CF_AIG_TOKEN exists:", !!env.CF_AIG_TOKEN);
+
   const { question } = (await request.json()) as { question: string };
   const date = parseDate(new URL(request.url).searchParams.get("date"));
   const slate = getMockSlate(date)
@@ -412,10 +166,8 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
     .slice(0, 3)
     .map((row) => `${row.player_name}: HRH 2+ ${Math.round(row.P_hrh_2p * 100)}%, score ${row.compositeScore}`)
     .join("; ");
-  const gatewayToken = env.SSA_CF_AIG_TOKEN || env.CF_AIG_TOKEN;
-  const byokAlias = env.SSA_CF_AIG_BYOK_ALIAS?.trim();
 
-  if (!gatewayToken) {
+  if (!env.CF_AIG_TOKEN) {
     return json(
       {
         answer: `SportsSenseAi Q&A is in safe fallback mode. Top model signals for ${date}: ${slate}. Question received: ${question}`
@@ -426,47 +178,27 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
   }
 
   try {
-    const headers: Record<string, string> = {
-      "cf-aig-authorization": `Bearer ${gatewayToken}`,
-      "content-type": "application/json"
-    };
+    const client = new OpenAI({
+      apiKey: env.SSA_CF_AIG_TOKEN,
+      baseURL: "https://gateway.ai.cloudflare.com/v1/71c315a0acd5896e9ca591df7d3e188b/fca-ai-gateway/compat"
+    });
 
-    if (byokAlias) {
-      headers["cf-aig-byok-alias"] = byokAlias;
-    }
+    const response = await client.chat.completions.create({
+      model: env.OPENAI_MODEL || "openai/gpt-4.1",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are SportsSenseAi's MLB analysis assistant. Use only the provided slate context, describe probabilities and model outputs, and never guarantee outcomes."
+        },
+        {
+          role: "user",
+          content: `Question: ${question}\nContext: ${slate}`
+        }
+      ]
+    });
 
-    const response = await fetch(
-      "https://gateway.ai.cloudflare.com/v1/71c315a0acd5896e9ca591df7d3e188b/fca-ai-gateway/openai/chat/completions",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: (env.OPENAI_MODEL || "openai/gpt-4.1").replace(/^openai\//, ""),
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are SportsSenseAi's MLB analysis assistant. Use only the provided slate context, describe probabilities and model outputs, and never guarantee outcomes."
-            },
-            {
-              role: "user",
-              content: `Question: ${question}\nContext: ${slate}`
-            }
-          ]
-        })
-      }
-    );
-
-    const payload = (await response.json()) as {
-      error?: { message?: string };
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    if (!response.ok) {
-      throw new Error(payload.error?.message || `AI Gateway request failed with status ${response.status}`);
-    }
-
-    const content = payload.choices
+    const content = response.choices
       ?.map((choice) => choice.message?.content || "")
       .filter(Boolean)
       .join("\n")
@@ -486,142 +218,85 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
   }
 }
 
-async function handleAdminDataHealth(request: Request, env: Env): Promise<Response> {
-  if (request.method !== "GET") {
-    return json({ error: "Method not allowed" }, 405, env);
-  }
-
-  const snapshot = await getDataHealthSnapshot(env);
-  return jsonWithSourceMeta(
-    request,
-    snapshot,
-    {
-      route: "/admin/mlb/data-health",
-      source: "db_audit",
-      tables: snapshot.tables.map((table) => table.table),
-      notes: "Internal audit snapshot for D1 coverage, mock risk, and route-to-source verification."
-    },
-    200,
-    env
-  );
+async function handleDataHealth(request: Request, env: Env): Promise<Response> {
+  return json(await getDataHealthSnapshot(env), 200, env);
 }
 
-async function runLiveSync(env: Env, dateParam?: string | null, gameId?: string | null) {
-  const date = parseDate(dateParam);
-  const now = new Date();
-  const scoreboard = await syncMlbScoreboardOdds(env, date, {
-    gameIds: gameId ? [gameId] : undefined,
-    now,
-    shouldPersistGame: gameId
-      ? undefined
-      : (game) => {
-          const phase = classifyPersistencePhase(game, now);
-          return shouldSyncPhase(phase);
-        }
-  });
-  const recentlyTrackedFinals = await getRecentlyTrackedFinals(env, scoreboard.discoveredGames, now);
-  const syncPlan = buildSyncPlan(scoreboard.discoveredGames, now, recentlyTrackedFinals);
-  const targetGameIds = gameId
-    ? [gameId]
-    : syncPlan
-        .filter((game) => game.phase === "live" || game.phase === "recent_final")
-        .map((game) => game.gameId);
-  const live = targetGameIds.length > 0 ? await syncMlbLiveGames(env, targetGameIds) : { synced_at: new Date().toISOString(), inserted: 0, games: [] };
-
-  return {
-    date,
-    now: now.toISOString(),
-    scoreboard,
-    syncPlan,
-    targetGameIds,
-    live
-  };
-}
-
-async function handleAdminLiveSync(request: Request, env: Env): Promise<Response> {
-  if (request.method !== "GET") {
-    return json({ error: "Method not allowed" }, 405, env);
-  }
-
+async function handleLiveSync(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const gameId = url.searchParams.get("game_id");
-  const sync = await runLiveSync(env, url.searchParams.get("date"), gameId);
+  const date = parseDate(url.searchParams.get("date"));
+  const scoreboardSync = await syncMlbScoreboardOdds(env, date, { liveOpsOnly: true });
+  const liveGameIds = scoreboardSync.games.filter((game) => game.status === "IN_PROGRESS").map((game) => game.gameId);
+  const liveSync = liveGameIds.length > 0 ? await syncMlbLiveGames(env, liveGameIds) : { synced_at: new Date().toISOString(), inserted: 0, games: [] };
 
-  return jsonWithSourceMeta(
-    request,
+  return json(
     {
-      date: sync.date,
-      synced_at: sync.now,
-      test_game_id: gameId,
-      target_game_ids: sync.targetGameIds,
+      date,
       polling: MLB_LIVE_SYNC_PROFILE,
       scoreboard: {
-        discovered_games: sync.scoreboard.discoveredGames.length,
-        synced_games: sync.scoreboard.games.length,
-        live_games: sync.scoreboard.liveGames.map((game) => ({
-          gameId: game.gameId,
-          status: game.status,
-          summary: game.summary,
-          startTime: game.startTime,
-          teams: {
-            away: game.teams.away.abbreviation,
-            home: game.teams.home.abbreviation
-          }
-        })),
-        odds_snapshots_attempted: sync.scoreboard.oddsSnapshotsAttempted,
-        odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
+        discovered_games: scoreboardSync.discoveredGames.length,
+        eligible_games: scoreboardSync.games.length,
+        live_games: scoreboardSync.liveGames.length,
+        odds_snapshots_persisted: scoreboardSync.oddsSnapshotsPersisted
       },
-      sync_plan: sync.syncPlan,
-      live_sync: sync.live
-    },
-    {
-      route: "/admin/mlb/live-sync",
-      source: "external_plus_db",
-      tables: ["mlb_odds", "mlb_odds_history", "mlb_live"],
-      notes:
-        "Internal live-ops route that discovers live MLB games from ESPN, persists scoreboard odds snapshots, and writes summary snapshots into mlb_live.",
-      breakdown: {
-        target_games: sync.targetGameIds.length,
-        scheduled_persist_games: sync.scoreboard.games.length,
-        live_rows_inserted: sync.live.inserted,
-        odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
-      }
+      live: liveSync
     },
     200,
     env
   );
 }
 
-async function handleScheduledLiveSync(controller: ScheduledController, env: Env): Promise<void> {
-  const now = new Date(controller.scheduledTime);
-  const shouldRun = isMorningPregameRefresh(now) || isFinalArchiveWindow(now) || isMinuteOpsWindow(now);
-  if (!shouldRun) {
-    console.log(
-      JSON.stringify({
-        worker: "router",
-        type: "mlb_live_sync_skipped",
-        scheduled_for: now.toISOString(),
-        reason: "outside_baseball_ops_window"
-      })
-    );
-    return;
+function formatEtDate(date: Date, dayOffset = 0): string {
+  const base = new Date(date.getTime() + dayOffset * 24 * 60 * 60 * 1000);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  return formatter.format(base);
+}
+
+function etClock(date: Date): { hour: number; minute: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const [hour, minute] = formatter.format(date).split(":").map((value) => Number(value));
+  return { hour, minute };
+}
+
+async function runScheduledMlbOps(env: Env, scheduledTime: number) {
+  const now = new Date(scheduledTime);
+  const { hour, minute } = etClock(now);
+  const todayEt = formatEtDate(now);
+  const previousEt = formatEtDate(now, -1);
+
+  const liveScoreboard = await syncMlbScoreboardOdds(env, todayEt, { liveOpsOnly: true });
+  const liveGameIds = liveScoreboard.games.filter((game) => game.status === "IN_PROGRESS").map((game) => game.gameId);
+  const recentTrackedRows =
+    (await queryAll<{ game_id: string }>(
+      env,
+      "SELECT DISTINCT game_id FROM mlb_live WHERE created_at >= datetime('now', '-10 minutes')"
+    )) || [];
+  const recentTrackedIds = new Set(recentTrackedRows.map((row) => row.game_id));
+  const recentFinalIds = liveScoreboard.discoveredGames
+    .filter((game) => game.status === "FINAL" && recentTrackedIds.has(game.gameId))
+    .map((game) => game.gameId);
+  const syncIds = [...new Set([...liveGameIds, ...recentFinalIds])];
+  if (syncIds.length > 0) {
+    await syncMlbLiveGames(env, syncIds);
   }
 
-  const scheduledDate = getScheduledSportsDate(now);
-  const sync = await runLiveSync(env, scheduledDate, null);
+  if (hour === 11 && minute === 0) {
+    await syncPregameSlate(env, todayEt);
+  }
 
-  console.log(
-    JSON.stringify({
-      worker: "router",
-      type: "mlb_live_sync",
-      scheduled_for: new Date(controller.scheduledTime).toISOString(),
-      date: sync.date,
-      sync_plan: sync.syncPlan,
-      target_games: sync.targetGameIds,
-      live_rows_inserted: sync.live.inserted,
-      odds_snapshots_persisted: sync.scoreboard.oddsSnapshotsPersisted
-    })
-  );
+  if (hour === 3 && minute === 0) {
+    await syncMlbScoreboardOdds(env, previousEt, { shouldPersistGame: (game) => game.status === "FINAL" });
+  }
 }
 
 export default {
@@ -636,19 +311,32 @@ export default {
 
     try {
       if (path === "/") {
-        return handleRoot(env);
+        return json(
+          {
+            ok: true,
+            app: "SportsSenseAi",
+            worker: "router",
+            routes: {
+              schedule: "/schedule/mlb",
+              pregame: "/pregame/mlb",
+              weather: "/weather/mlb",
+              pitchers: "/pitchers/mlb",
+              gamecast: "/games/mlb/:gameId/gamecast"
+            }
+          },
+          200,
+          env
+        );
       }
 
       if (path === "/health") {
-        const calibrationRow = await queryFirst<CalibrationRow>(
-          env,
-          "SELECT date, prop_type, bucket, proj_avg, actual_avg, count FROM mlb_calibration ORDER BY date DESC LIMIT 1"
-        );
-        const healthData = calibrationRow || getMockCalibration(parseDate(url.searchParams.get("date")))[0];
-        const source = calibrationRow ? "db" : "mock";
+        const healthData =
+          (await queryFirst<CalibrationRow>(
+            env,
+            "SELECT date, prop_type, bucket, proj_avg, actual_avg, count FROM mlb_calibration ORDER BY date DESC LIMIT 1"
+          )) || getMockCalibration(parseDate(url.searchParams.get("date")))[0];
 
-        return jsonWithSourceMeta(
-          request,
+        return json(
           {
             ok: true,
             app: "SportsSenseAi",
@@ -656,24 +344,24 @@ export default {
             db_bound: Boolean(env.DB),
             latest_calibration: healthData
           },
-          {
-            route: "/health",
-            source,
-            tables: ["mlb_calibration"],
-            notes: source === "db" ? "Latest calibration row resolved from D1." : "Returned seeded calibration fallback."
-          },
           200,
           env
         );
       }
 
       if (path.startsWith("/auth")) return handleAuth(request, env);
-      if (path === "/admin/mlb/data-health") return handleAdminDataHealth(request, env);
-      if (path === "/admin/mlb/live-sync") return handleAdminLiveSync(request, env);
       if (path.startsWith("/billing")) return handleBilling(request, env);
-      if (path.startsWith("/project/mlb") || path.startsWith("/schedule/mlb") || path.startsWith("/games/mlb")) {
-        return handleScheduleRequest(request, env);
+      if (path.startsWith("/pregame/mlb") || path.startsWith("/weather/mlb") || path.startsWith("/admin/mlb/pregame-sync") || path.startsWith("/admin/mlb/statcast-sync")) {
+        return handlePregameRequest(request, env);
       }
+      if (path.startsWith("/games/mlb/") && path.endsWith("/preview")) return handlePregameRequest(request, env);
+      if (path.startsWith("/pitchers/mlb") || path.startsWith("/admin/mlb/pitchers/sync")) return handlePitchersRequest(request, env);
+      if (path.startsWith("/research/mlb")) return handleResearchRequest(request, env);
+      if (path.startsWith("/admin/mlb/data-health")) return handleDataHealth(request, env);
+      if (path.startsWith("/admin/mlb/live-sync")) return handleLiveSync(request, env);
+      if (path.startsWith("/project/mlb") || path.startsWith("/schedule/mlb")) return handleScheduleRequest(request, env);
+      if (path.startsWith("/games/mlb/") && path.endsWith("/gamecast")) return handleGameContextRequest(request, env);
+      if (path.startsWith("/games/mlb/")) return handleScheduleRequest(request, env);
       if (path.startsWith("/lineups/mlb")) return handleLineupsRequest(request, env);
       if (
         path.startsWith("/game/mlb") ||
@@ -686,7 +374,6 @@ export default {
       }
       if (path.startsWith("/sim/mlb")) return handleSimRequest(request, env);
       if (path.startsWith("/market/mlb")) return handleMarketMakerRequest(request, env);
-      if (path.startsWith("/research/mlb")) return handleResearchRequest(request, env);
       if (path.startsWith("/risk/mlb")) return handleRiskEngineRequest(request, env);
       if (path.startsWith("/autobet/mlb")) return handleAutoBetRequest(request, env);
       if (path.startsWith("/mlb/qa")) return handleAiGateway(request, env);
@@ -698,10 +385,6 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(
-      handleScheduledLiveSync(controller, env).catch((error) => {
-        console.error("Scheduled MLB live sync failed", error);
-      })
-    );
+    ctx.waitUntil(runScheduledMlbOps(env, controller.scheduledTime));
   }
 };

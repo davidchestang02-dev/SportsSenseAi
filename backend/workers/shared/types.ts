@@ -121,6 +121,278 @@ export interface NormalizedScheduledGame {
   };
   odds: NormalizedGameOdds | null;
   stream: NormalizedGameStream;
+  books?: UnifiedGameOddsBook[];
+}
+
+export interface NormalizedProbablePitcher {
+  id: string | null;
+  name: string | null;
+  headshot: string | null;
+}
+
+export interface NormalizedPregameGame extends NormalizedScheduledGame {
+  season: number | null;
+  seasonType: string | null;
+  venue: {
+    name: string | null;
+    city: string | null;
+    state: string | null;
+  };
+  probablePitchers: {
+    home: NormalizedProbablePitcher | null;
+    away: NormalizedProbablePitcher | null;
+  };
+  updatedAt: string | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface NormalizedPitcherSplit {
+  season: number;
+  playerId: string;
+  splitCode: string;
+  splitLabel: string | null;
+  gp: number | null;
+  ip: number | null;
+  h: number | null;
+  er: number | null;
+  hr: number | null;
+  bb: number | null;
+  k: number | null;
+  era: number | null;
+  whip: number | null;
+  k9: number | null;
+  bb9: number | null;
+  hr9: number | null;
+  kbb: number | null;
+  split: Record<string, unknown>;
+}
+
+export interface NormalizedPitcherStats {
+  season: number;
+  espnPlayerId: string;
+  name: string;
+  teamId: string | null;
+  teamAbbr: string | null;
+  teamName: string | null;
+  pos: string | null;
+  jersey: string | null;
+  status: string | null;
+  headshotUrl: string | null;
+  throws: string | null;
+  gp: number | null;
+  gs: number | null;
+  qs: number | null;
+  w: number | null;
+  l: number | null;
+  sv: number | null;
+  hld: number | null;
+  ip: number | null;
+  h: number | null;
+  er: number | null;
+  hr: number | null;
+  bb: number | null;
+  k: number | null;
+  era: number | null;
+  whip: number | null;
+  k9: number | null;
+  bb9: number | null;
+  hr9: number | null;
+  kbb: number | null;
+  war: number | null;
+  model: {
+    kPct: number | null;
+    bbPct: number | null;
+    fip: number | null;
+  };
+  splits: NormalizedPitcherSplit[];
+  raw?: Record<string, unknown>;
+}
+
+export interface StatcastHitter {
+  playerId: number | null;
+  name: string;
+  team: string;
+  bats: string | null;
+  pa: number | null;
+  xwOBA: number | null;
+  xBA: number | null;
+  xSLG: number | null;
+  hardHitPct: number | null;
+  avgEV: number | null;
+  avgLA: number | null;
+  barrelPct: number | null;
+}
+
+export interface StatcastPitcher {
+  playerId: number | null;
+  name: string;
+  team: string;
+  throws: string | null;
+  ip: number | null;
+  xERA: number | null;
+  xwOBA: number | null;
+  kPct: number | null;
+  bbPct: number | null;
+  barrelPctAllowed: number | null;
+  avgEVAllowed: number | null;
+  pitchMix: Record<string, number>;
+}
+
+export interface StatcastPreview {
+  gameId: string;
+  gamePk: number | null;
+  date: string;
+  homeTeam: string;
+  awayTeam: string;
+  hittersHome: StatcastHitter[];
+  hittersAway: StatcastHitter[];
+  pitcherHome: StatcastPitcher | null;
+  pitcherAway: StatcastPitcher | null;
+  raw?: Record<string, unknown>;
+}
+
+export interface NormalizedWeatherGame {
+  gameId: string;
+  date: string;
+  awayTeam: string;
+  homeTeam: string;
+  park: string | null;
+  city: string | null;
+  state: string | null;
+  firstPitchLocal: string | null;
+  isDome: boolean;
+  roofStatus: "open" | "closed" | "unknown";
+  stoplight: "green" | "yellow" | "orange" | "red";
+  environment: {
+    runEnvIndex: number | null;
+    hrEnvIndex: number | null;
+    evBoostPct: number | null;
+    babipBoostPct: number | null;
+  };
+  hourly: Array<{
+    timeLabel: string;
+    tempF: number | null;
+    conditions: string | null;
+    windSpeed: number | null;
+    windDirDeg: number | null;
+    precipProb: number | null;
+    cloudCover: number | null;
+    source: string;
+  }>;
+}
+
+export interface UnifiedGameOddsBook {
+  book: string;
+  source: string;
+  updatedAt: string | null;
+  teams: {
+    home: string | null;
+    away: string | null;
+  };
+  moneyline: {
+    home: number | null;
+    away: number | null;
+  };
+  spread: {
+    line: number | null;
+    homeOdds: number | null;
+    awayOdds: number | null;
+  };
+  total: {
+    line: number | null;
+    overOdds: number | null;
+    underOdds: number | null;
+  };
+  payload?: Record<string, unknown>;
+}
+
+export interface NormalizedGamecastPlay {
+  id: string;
+  sequence: number;
+  inning: number | null;
+  half: string | null;
+  outsBefore: number | null;
+  outsAfter: number | null;
+  ballsBefore: number | null;
+  strikesBefore: number | null;
+  result: {
+    type: string | null;
+    description: string | null;
+    rbi: number | null;
+    runsScored: number | null;
+  };
+  runners: Array<Record<string, unknown>>;
+  winProbability: {
+    home: number | null;
+    away: number | null;
+  };
+  timestamp: string | null;
+  batter: {
+    id: string | null;
+    name: string | null;
+  } | null;
+  pitcher: {
+    id: string | null;
+    name: string | null;
+  } | null;
+}
+
+export interface NormalizedGamecast {
+  gameId: string;
+  league: League;
+  status: {
+    state: "PRE" | "IN_PROGRESS" | "FINAL";
+    detail: string;
+    progress: {
+      inning: number | null;
+      half: string | null;
+      outs: number | null;
+      balls: number | null;
+      strikes: number | null;
+      pitchCount: number | null;
+    };
+  };
+  teams: {
+    away: NormalizedGameTeam;
+    home: NormalizedGameTeam;
+  };
+  scoreByInning: {
+    away: Array<number | null>;
+    home: Array<number | null>;
+  };
+  situation: {
+    inning: number | null;
+    half: string | null;
+    outs: number | null;
+    balls: number | null;
+    strikes: number | null;
+    onBase: {
+      first: boolean;
+      second: boolean;
+      third: boolean;
+    };
+    description: string | null;
+  };
+  currentMatchup: {
+    batter: Record<string, unknown> | null;
+    pitcher: Record<string, unknown> | null;
+  };
+  plays: NormalizedGamecastPlay[];
+  boxscore: {
+    away: Record<string, unknown>;
+    home: Record<string, unknown>;
+  };
+  odds: {
+    books: UnifiedGameOddsBook[];
+    preferredBook: UnifiedGameOddsBook | null;
+  };
+  meta: {
+    venue: string | null;
+    city: string | null;
+    startTime: string | null;
+    tv: string[];
+    lastUpdated: string | null;
+  };
 }
 
 export type ProjectionType = "batter" | "pitcher";

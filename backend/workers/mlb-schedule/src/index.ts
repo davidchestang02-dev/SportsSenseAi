@@ -1,6 +1,14 @@
 import { execute, queryAll, queryFirst } from "../../shared/db";
 import { jsonWithSourceMeta } from "../../shared/sourceMeta";
-import type { Env, NormalizedBookProvider, NormalizedGameOdds, NormalizedGameStream, NormalizedGameTeam, NormalizedScheduledGame } from "../../shared/types";
+import type {
+  Env,
+  NormalizedBookProvider,
+  NormalizedGameOdds,
+  NormalizedGameStream,
+  NormalizedGameTeam,
+  NormalizedScheduledGame,
+  UnifiedGameOddsBook
+} from "../../shared/types";
 import { methodNotAllowed, parseDate, withError } from "../../shared/utils";
 
 type AnyRecord = Record<string, any>;
@@ -8,6 +16,7 @@ type AnyRecord = Record<string, any>;
 const ESPN_PERSONALIZED_SCOREBOARD_URL =
   "https://site.web.api.espn.com/apis/personalized/v2/scoreboard/header?sport=baseball&league=mlb&region=us&lang=en&contentorigin=espn&configuration=STREAM_MENU&platform=web&features=sfb-all%2Ccutl&buyWindow=1m&showAirings=buy%2Clive%2Creplay&showZipLookup=true&tz=America%2FNew_York&postalCode=27332&playabilitySource=playbackId";
 const ESPN_SITE_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard";
+const ROTOWIRE_MLB_ODDS_URL = "https://www.rotowire.com/betting/mlb/odds";
 
 function stringOrNull(value: unknown): string | null {
   if (typeof value === "string") {
@@ -310,6 +319,181 @@ function normalizeGame(event: AnyRecord): NormalizedScheduledGame {
   };
 }
 
+function teamAlias(value: string | null): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  const aliases: Record<string, string> = {
+    AZ: "ARI",
+    ARZ: "ARI",
+    KCR: "KC",
+    WSN: "WSH",
+    WAS: "WSH",
+    SDP: "SD",
+    CWS: "CHW",
+    TBR: "TB",
+    SFG: "SF"
+  };
+  return aliases[normalized] || normalized;
+}
+
+function currentPointLine(point: { current: { line: number | null }; close: { line: number | null }; open: { line: number | null } }): number | null {
+  return pickNumber(point.current.line, point.close.line, point.open.line);
+}
+
+function currentPointOdds(point: { current: { odds: number | null }; close: { odds: number | null }; open: { odds: number | null } }): number | null {
+  return pickNumber(point.current.odds, point.close.odds, point.open.odds);
+}
+
+function currentMoneyline(side: { current: number | null; close: number | null; open: number | null }): number | null {
+  return pickNumber(side.current, side.close, side.open);
+}
+
+function bookFromEspnOdds(game: NormalizedScheduledGame): UnifiedGameOddsBook | null {
+  const odds = game.odds;
+  if (!odds?.provider) {
+    return null;
+  }
+
+  return {
+    book: odds.provider.name,
+    source: "espn",
+    updatedAt: odds.lastUpdated,
+    teams: {
+      home: game.teams.home.abbreviation,
+      away: game.teams.away.abbreviation
+    },
+    moneyline: {
+      home: currentMoneyline(odds.moneyline.home),
+      away: currentMoneyline(odds.moneyline.away)
+    },
+    spread: {
+      line: currentPointLine(odds.spread.home),
+      homeOdds: currentPointOdds(odds.spread.home),
+      awayOdds: currentPointOdds(odds.spread.away)
+    },
+    total: {
+      line: currentPointLine(odds.total.over),
+      overOdds: currentPointOdds(odds.total.over),
+      underOdds: currentPointOdds(odds.total.under)
+    },
+    payload: odds as unknown as Record<string, unknown>
+  };
+}
+
+function extractRotowireJson(html: string): AnyRecord | null {
+  const patterns = [/__RW_ODDS_DATA__\s*=\s*(\{[\s\S]*?\});/, /window\.__RW_ODDS_DATA__\s*=\s*(\{[\s\S]*?\});/];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      try {
+        return JSON.parse(match[1]) as AnyRecord;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeRotowireBooks(payload: AnyRecord, date: string): UnifiedGameOddsBook[] {
+  const games = Array.isArray(payload?.games) ? payload.games : [];
+  return games.flatMap((game: AnyRecord) => {
+    const books = Array.isArray(game?.books) ? game.books : Array.isArray(game?.odds) ? game.odds : [];
+    return books.map((book: AnyRecord) => ({
+      book: String(book?.book || book?.bookName || "Unknown"),
+      source: "rotowire",
+      updatedAt: stringOrNull(book?.timestamp || book?.updated) || `${date}T00:00:00.000Z`,
+      teams: {
+        home: stringOrNull(game?.homeTeam || game?.home),
+        away: stringOrNull(game?.awayTeam || game?.away)
+      },
+      moneyline: {
+        home: numberOrNull(book?.moneyline?.home),
+        away: numberOrNull(book?.moneyline?.away)
+      },
+      spread: {
+        line: numberOrNull(book?.spread?.line),
+        homeOdds: numberOrNull(book?.spread?.home),
+        awayOdds: numberOrNull(book?.spread?.away)
+      },
+      total: {
+        line: numberOrNull(book?.total?.line),
+        overOdds: numberOrNull(book?.total?.over),
+        underOdds: numberOrNull(book?.total?.under)
+      },
+      payload: { game, book }
+    }));
+  });
+}
+
+async function fetchRotowireBooks(date: string): Promise<UnifiedGameOddsBook[]> {
+  try {
+    const response = await fetch(`${ROTOWIRE_MLB_ODDS_URL}?date=${date}`);
+    if (!response.ok) {
+      return [];
+    }
+    const payload = extractRotowireJson(await response.text());
+    return payload ? normalizeRotowireBooks(payload, date) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function persistUnifiedBook(env: Env, date: string, gameId: string, book: UnifiedGameOddsBook): Promise<void> {
+  await execute(
+    env,
+    `INSERT OR REPLACE INTO mlb_game_odds_books (
+      date, game_id, book, source, home_team_abbr, away_team_abbr,
+      moneyline_home, moneyline_away, spread_line, spread_home_odds, spread_away_odds,
+      total_line, total_over_odds, total_under_odds, payload_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      date,
+      gameId,
+      book.book,
+      book.source,
+      book.teams.home,
+      book.teams.away,
+      book.moneyline.home,
+      book.moneyline.away,
+      book.spread.line,
+      book.spread.homeOdds,
+      book.spread.awayOdds,
+      book.total.line,
+      book.total.overOdds,
+      book.total.underOdds,
+      JSON.stringify(book.payload || book),
+      book.updatedAt || new Date().toISOString()
+    ]
+  );
+
+  await execute(
+    env,
+    `INSERT INTO mlb_game_odds_books_history (
+      timestamp, date, game_id, book, source, home_team_abbr, away_team_abbr,
+      moneyline_home, moneyline_away, spread_line, spread_home_odds, spread_away_odds,
+      total_line, total_over_odds, total_under_odds, payload_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      new Date().toISOString(),
+      date,
+      gameId,
+      book.book,
+      book.source,
+      book.teams.home,
+      book.teams.away,
+      book.moneyline.home,
+      book.moneyline.away,
+      book.spread.line,
+      book.spread.homeOdds,
+      book.spread.awayOdds,
+      book.total.line,
+      book.total.overOdds,
+      book.total.underOdds,
+      JSON.stringify(book.payload || book)
+    ]
+  );
+}
+
 export async function syncMlbScoreboardOdds(
   env: Env,
   date: string,
@@ -330,6 +514,7 @@ export async function syncMlbScoreboardOdds(
   const scoreboard = await fetchScoreboardForDate(date);
   const events = getScoreboardEvents(scoreboard);
   const discoveredGames = events.map((event: AnyRecord) => normalizeGame(event));
+  const rotowireBooks = await fetchRotowireBooks(date);
   const scopedGameIds = new Set((options.gameIds || []).filter(Boolean));
   const now = options.now || new Date();
 
@@ -349,7 +534,25 @@ export async function syncMlbScoreboardOdds(
     return true;
   });
 
-  const persistedOdds = await Promise.all(games.map((game) => persistOddsSnapshot(env, date, game)));
+  const rotowireByMatchup = rotowireBooks.reduce<Record<string, UnifiedGameOddsBook[]>>((accumulator, book) => {
+    const key = `${teamAlias(book.teams.away)}@${teamAlias(book.teams.home)}`;
+    const existing = accumulator[key] || [];
+    existing.push(book);
+    accumulator[key] = existing;
+    return accumulator;
+  }, {});
+
+  const persistedOdds = await Promise.all(
+    games.map(async (game) => {
+      const persisted = await persistOddsSnapshot(env, date, game);
+      const espnBook = bookFromEspnOdds(game);
+      const matchupKey = `${teamAlias(game.teams.away.abbreviation)}@${teamAlias(game.teams.home.abbreviation)}`;
+      const mergedBooks = [...(rotowireByMatchup[matchupKey] || []), ...(espnBook ? [espnBook] : [])];
+      game.books = mergedBooks;
+      await Promise.all(mergedBooks.map((book) => persistUnifiedBook(env, date, game.gameId, book)));
+      return persisted;
+    })
+  );
 
   return {
     date,
@@ -539,6 +742,57 @@ async function loadOddsPersistenceState(
     historyRows,
     refreshedFromScoreboard
   };
+}
+
+async function loadUnifiedBooks(env: Env, gameId: string, date: string | null): Promise<UnifiedGameOddsBook[]> {
+  const rows =
+    (await queryAll<{
+      book: string;
+      source: string;
+      home_team_abbr: string | null;
+      away_team_abbr: string | null;
+      moneyline_home: number | null;
+      moneyline_away: number | null;
+      spread_line: number | null;
+      spread_home_odds: number | null;
+      spread_away_odds: number | null;
+      total_line: number | null;
+      total_over_odds: number | null;
+      total_under_odds: number | null;
+      payload_json: string;
+      updated_at: string | null;
+    }>(
+      env,
+      date
+        ? "SELECT * FROM mlb_game_odds_books WHERE game_id = ? AND date = ? ORDER BY book"
+        : "SELECT * FROM mlb_game_odds_books WHERE game_id = ? ORDER BY updated_at DESC, book",
+      date ? [gameId, date] : [gameId]
+    )) || [];
+
+  return rows.map((row) => ({
+    book: row.book,
+    source: row.source,
+    updatedAt: row.updated_at,
+    teams: {
+      home: row.home_team_abbr,
+      away: row.away_team_abbr
+    },
+    moneyline: {
+      home: row.moneyline_home,
+      away: row.moneyline_away
+    },
+    spread: {
+      line: row.spread_line,
+      homeOdds: row.spread_home_odds,
+      awayOdds: row.spread_away_odds
+    },
+    total: {
+      line: row.total_line,
+      overOdds: row.total_over_odds,
+      underOdds: row.total_under_odds
+    },
+    payload: row.payload_json ? (JSON.parse(row.payload_json) as Record<string, unknown>) : undefined
+  }));
 }
 
 function buildOddsHistoryPayload(gameId: string, date: string | null, currentRow: AnyRecord | null, historyRows: AnyRecord[]) {
@@ -869,9 +1123,17 @@ export async function handleScheduleRequest(request: Request, env: Env): Promise
 
       const normalizedGame = normalizeGame(event);
       const persisted = await persistOddsSnapshot(env, date, normalizedGame);
+      const espnBook = bookFromEspnOdds(normalizedGame);
+      const rotowireBooks = await fetchRotowireBooks(date);
+      const matchupKey = `${teamAlias(normalizedGame.teams.away.abbreviation)}@${teamAlias(normalizedGame.teams.home.abbreviation)}`;
+      const matchedRotowire = rotowireBooks.filter(
+        (book) => `${teamAlias(book.teams.away)}@${teamAlias(book.teams.home)}` === matchupKey
+      );
+      normalizedGame.books = [...matchedRotowire, ...(espnBook ? [espnBook] : [])];
+      await Promise.all(normalizedGame.books.map((book) => persistUnifiedBook(env, date, normalizedGame.gameId, book)));
       const payload =
         subresource === "odds"
-          ? normalizedGame.odds
+          ? { ...normalizedGame.odds, books: normalizedGame.books }
           : subresource === "streams"
             ? normalizedGame.stream
             : normalizedGame;
@@ -882,10 +1144,10 @@ export async function handleScheduleRequest(request: Request, env: Env): Promise
         {
           route,
           source: "espn_scoreboard",
-          tables: ["mlb_odds", "mlb_odds_history"],
+          tables: ["mlb_odds", "mlb_odds_history", "mlb_game_odds_books", "mlb_game_odds_books_history"],
           notes:
             subresource === "odds"
-              ? "Game odds were fetched from ESPN scoreboard competition odds and normalized into the SportsSenseAi odds schema."
+              ? "Game odds were fetched from ESPN scoreboard competition odds, enriched with any RotoWire book matches, and normalized into the SportsSenseAi odds schema."
               : subresource === "streams"
                 ? "Game stream metadata was fetched from ESPN scoreboard watch and broadcast fields."
                 : "Game detail was fetched from ESPN scoreboard and normalized into the SportsSenseAi game schema.",
@@ -914,8 +1176,8 @@ export async function handleScheduleRequest(request: Request, env: Env): Promise
       {
         route: path,
         source: "espn_scoreboard",
-        tables: ["mlb_odds", "mlb_odds_history"],
-        notes: "Scoreboard slate, odds, and stream metadata fetched from ESPN and normalized into SportsSenseAi game objects.",
+        tables: ["mlb_odds", "mlb_odds_history", "mlb_game_odds_books", "mlb_game_odds_books_history"],
+        notes: "Scoreboard slate, odds, stream metadata, and multi-book game odds snapshots are normalized into SportsSenseAi game objects.",
         breakdown: {
           games: sync.games.length,
           odds_snapshots_persisted: sync.oddsSnapshotsPersisted

@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { getResearchPlayer, getResearchSlate, getResearchTeam } from "./api";
+import {
+  getGamePreview,
+  getPitcher,
+  getPitchers,
+  getPregame,
+  getResearchPlayer,
+  getResearchSlate,
+  getResearchTeam,
+  getWeather
+} from "./api";
 
 function useRemoteResource(loader, initialValue, deps) {
   const [state, setState] = useState({
@@ -61,6 +70,51 @@ const emptySlate = {
 
 export function useResearchSlate(selectedDate) {
   return useRemoteResource(() => getResearchSlate(selectedDate), emptySlate, [selectedDate]);
+}
+
+export function usePregameSlate(selectedDate) {
+  return useRemoteResource(() => getPregame(selectedDate), { date: selectedDate, games: [] }, [selectedDate]);
+}
+
+export function useWeather(selectedDate) {
+  return useRemoteResource(() => getWeather(selectedDate), { date: selectedDate, games: [] }, [selectedDate]);
+}
+
+export function usePitcherLeaderboard(selectedDate, options = {}) {
+  const season = Number(options.season || selectedDate.slice(0, 4));
+  const sort = options.sort || "era";
+  return useRemoteResource(
+    () => getPitchers({ season, sort, limit: options.limit || 100 }),
+    { season, pitchers: [] },
+    [season, sort, options.limit]
+  );
+}
+
+export function usePitcherProfile(playerId, selectedDate) {
+  const season = Number(selectedDate.slice(0, 4));
+  return useRemoteResource(
+    async () => {
+      if (!playerId) {
+        return null;
+      }
+      return getPitcher(playerId, { season });
+    },
+    null,
+    [playerId, season]
+  );
+}
+
+export function useGamePreview(gameId, selectedDate) {
+  return useRemoteResource(
+    async () => {
+      if (!gameId) {
+        return null;
+      }
+      return getGamePreview(gameId, { date: selectedDate });
+    },
+    null,
+    [gameId, selectedDate]
+  );
 }
 
 export function useTeamResearch(teamId, selectedDate) {

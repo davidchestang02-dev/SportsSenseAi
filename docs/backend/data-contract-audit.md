@@ -16,13 +16,20 @@ This audit is the current route-to-source map for the public MLB product. It is 
 | Route | Worker | Source Mode | Tables | Current State |
 | --- | --- | --- | --- | --- |
 | `/health` | `router` | `db_or_mock` | `mlb_calibration` | Partial |
-| `/project/mlb` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
-| `/schedule/mlb` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
-| `/games/mlb/:gameId` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
-| `/games/mlb/:gameId/odds` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
-| `/games/mlb/:gameId/odds/history` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
-| `/games/mlb/:gameId/odds/movement` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
-| `/games/mlb/:gameId/streams` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history` | Verified |
+| `/project/mlb` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
+| `/schedule/mlb` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
+| `/pregame/mlb` | `mlb-pregame` | `external_plus_db` | `mlb_pregame_games`, `mlb_pregame_teams`, `mlb_pregame_venues` | Verified |
+| `/weather/mlb` | `mlb-pregame` | `db_only` | `mlb_pregame_games`, `mlb_weather`, `mlb_game_context`, `mlb_statcast_previews` | Verified |
+| `/pitchers/mlb` | `mlb-pitchers` | `db_only` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
+| `/pitchers/mlb/:playerId` | `mlb-pitchers` | `db_only` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
+| `/pitchers/mlb/:playerId/splits` | `mlb-pitchers` | `db_only` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
+| `/games/mlb/:gameId` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
+| `/games/mlb/:gameId/preview` | `mlb-pregame` | `db_only` | `mlb_pregame_games`, `mlb_statcast_previews`, `mlb_game_context`, `mlb_weather` | Verified |
+| `/games/mlb/:gameId/odds` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
+| `/games/mlb/:gameId/odds/history` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
+| `/games/mlb/:gameId/odds/movement` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
+| `/games/mlb/:gameId/gamecast` | `mlb-game-context` | `external_plus_db` | `mlb_gamecast_state`, `mlb_gamecast_plays`, `mlb_game_odds_books`, `mlb_live` | Verified |
+| `/games/mlb/:gameId/streams` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
 | `/sim/mlb` | `mlb-sim` | `db_or_mock` | `mlb_projections`, `mlb_game_context` | Partial |
 | `/market/mlb` | `mlb-market-maker` | `db_or_mock` | `mlb_market_views` | Partial |
 | `/risk/mlb` | `mlb-risk-engine` | `db_only` | `mlb_market_views`, `mlb_risk_runs` | Partial |
@@ -30,11 +37,14 @@ This audit is the current route-to-source map for the public MLB product. It is 
 | `/lineups/mlb` | `mlb-lineups` | `db_or_mock` | `mlb_lineups`, `mlb_injuries` | Partial |
 | `/game/mlb/:gameId` | `mlb-game-context` | `db_or_mock` | `mlb_projections` | Partial |
 | `/player/mlb/:playerId` | `mlb-game-context` | `db_or_mock` | `mlb_projections` | Partial |
-| `/live/mlb` | `mlb-game-context` | `db_or_mock` | `mlb_live` | Partial |
+| `/live/mlb` | `mlb-game-context` | `db_or_mock` | `mlb_live`, `mlb_gamecast_state`, `mlb_game_odds_books` | Partial |
 | `/game-context/mlb` | `mlb-game-context` | `db_or_mock` | `mlb_game_context` | Partial |
 | `/admin/mlb/health-data` | `mlb-game-context` | `db_or_mock` | `mlb_calibration` | Partial |
 | `/admin/mlb/data-health` | `router` | `db_only` | multiple | Verified |
-| `/admin/mlb/live-sync` | `router` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_live` | Verified |
+| `/admin/mlb/pregame-sync` | `mlb-pregame` | `external_plus_db` | `mlb_pregame_games`, `mlb_pregame_teams`, `mlb_pregame_venues` | Verified |
+| `/admin/mlb/statcast-sync` | `mlb-pregame` | `external_plus_db` | `mlb_statcast_previews`, `mlb_pregame_games` | Verified |
+| `/admin/mlb/pitchers/sync` | `mlb-pitchers` | `external_plus_db` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
+| `/admin/mlb/live-sync` | `router` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_live`, `mlb_gamecast_state`, `mlb_gamecast_plays`, `mlb_game_odds_books` | Verified |
 | `/research/mlb/slate` | `mlb-research` | `external` | none | Verified |
 | `/research/mlb/team/:teamId` | `mlb-research` | `external` | none | Verified |
 | `/research/mlb/player/:playerId` | `mlb-research` | `external` | none | Verified |
@@ -57,12 +67,25 @@ This audit is the current route-to-source map for the public MLB product. It is 
 
 These routes use D1 when rows exist, but they still fall back to mock output when the pipeline does not populate the required tables.
 
+### Newly wired and verified
+
+- `/pregame/mlb`
+- `/weather/mlb`
+- `/pitchers/mlb`
+- `/pitchers/mlb/:playerId`
+- `/pitchers/mlb/:playerId/splits`
+- `/games/mlb/:gameId/preview`
+- `/games/mlb/:gameId/gamecast`
+- `/admin/mlb/pregame-sync`
+- `/admin/mlb/statcast-sync`
+- `/admin/mlb/pitchers/sync`
+
 ## Next Pipeline Targets
 
 1. Populate `mlb_projections` reliably from the Python modeling outputs.
 2. Populate `mlb_market_views` from real odds aggregation and market maker output.
 3. Populate `mlb_lineups`, `mlb_injuries`, and `mlb_game_context` before lock each day.
-4. Populate `mlb_live` with pitch-level or event-level updates instead of single-snapshot fallback.
+4. Deepen `mlb_live` from summary snapshots into consistently pitch-level reads across all active games.
 5. Populate `mlb_market_views` so `risk` and `autobet` return real D1-backed recommendations instead of `db_empty`.
 
 ## Live Ops Notes
@@ -74,6 +97,7 @@ These routes use D1 when rows exist, but they still fall back to mock output whe
 - Daily pregame board setup runs at `11:00 ET`, with a second validation pass `60` minutes before first pitch.
 - Live games sync every minute, recently tracked finals stay hot for `2` minutes after completion, and the overnight ML archive sweep runs at `03:00 ET`.
 - The app reflects that cadence while open with `60` second live refreshes, hourly scheduled-board refreshes until prelock, and `2` minute recent-final refreshes.
+- Pregame slate persistence, pitcher ingestion, Statcast previews, unified odds-book persistence, and normalized Gamecast state now have D1-backed foundations in place.
 - ESPN-style 5-second play-by-play polling remains a target profile for a future dedicated live feed worker.
 
 ## Verification Checklist

@@ -9,6 +9,8 @@ const CommandCenterPage = lazy(() => import("./pages").then((module) => ({ defau
 const TeamsPage = lazy(() => import("./pages").then((module) => ({ default: module.TeamsPage })));
 const GamesPage = lazy(() => import("./pages").then((module) => ({ default: module.GamesPage })));
 const PlayersPage = lazy(() => import("./pages").then((module) => ({ default: module.PlayersPage })));
+const PitchersPage = lazy(() => import("./pages").then((module) => ({ default: module.PitchersPage })));
+const WeatherPage = lazy(() => import("./pages").then((module) => ({ default: module.WeatherPage })));
 const MarketsPage = lazy(() => import("./pages").then((module) => ({ default: module.MarketsPage })));
 const LivePage = lazy(() => import("./pages").then((module) => ({ default: module.LivePage })));
 const LineupsPage = lazy(() => import("./pages").then((module) => ({ default: module.LineupsPage })));
@@ -19,6 +21,8 @@ const navItems = [
   { to: "/teams", label: "Teams" },
   { to: "/games", label: "Games" },
   { to: "/players", label: "Players" },
+  { to: "/pitchers", label: "Pitchers" },
+  { to: "/weather", label: "Weather" },
   { to: "/markets", label: "Markets" },
   { to: "/live", label: "Live Ops" },
   { to: "/lineups", label: "Lineups" }
@@ -100,6 +104,8 @@ export default function App() {
             <Route path="/teams" element={<TeamsPage selectedDate={selectedDate} />} />
             <Route path="/games" element={<GamesPage data={data} selectedDate={selectedDate} />} />
             <Route path="/players" element={<PlayersPage data={data} selectedDate={selectedDate} />} />
+            <Route path="/pitchers" element={<PitchersPage selectedDate={selectedDate} />} />
+            <Route path="/weather" element={<WeatherPage selectedDate={selectedDate} />} />
             <Route path="/markets" element={<MarketsPage data={data} />} />
             <Route path="/live" element={<LivePage data={data} selectedDate={selectedDate} />} />
             <Route path="/lineups" element={<LineupsPage data={data} />} />

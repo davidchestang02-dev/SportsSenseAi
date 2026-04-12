@@ -36,24 +36,32 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
     worker: "mlb-schedule",
     source_mode: "external_plus_db",
     verification_status: "verified",
-    tables: ["mlb_odds", "mlb_odds_history"],
-    notes: "Alias of /project/mlb with the same ESPN scoreboard-based ingestion and D1 write-back behavior."
+    tables: ["mlb_odds", "mlb_odds_history", "mlb_game_odds_books", "mlb_game_odds_books_history"],
+    notes: "Alias of /project/mlb with the same ESPN scoreboard-based ingestion, D1 write-back behavior, and unified game-odds book snapshots."
+  },
+  {
+    path: "/pregame/mlb",
+    worker: "mlb-pregame",
+    source_mode: "external_plus_db",
+    verification_status: "partial",
+    tables: ["mlb_pregame_games", "mlb_pregame_teams", "mlb_pregame_venues"],
+    notes: "Persisted MLB pregame slate built from the ESPN scoreboard and re-read from D1."
   },
   {
     path: "/games/mlb/:gameId",
     worker: "mlb-schedule",
     source_mode: "external_plus_db",
     verification_status: "verified",
-    tables: ["mlb_odds", "mlb_odds_history"],
-    notes: "Game detail is fetched from the ESPN scoreboard feed, normalized into the SportsSenseAi game schema, and can persist odds snapshots to D1."
+    tables: ["mlb_odds", "mlb_odds_history", "mlb_game_odds_books", "mlb_game_odds_books_history"],
+    notes: "Game detail is fetched from the ESPN scoreboard feed, normalized into the SportsSenseAi game schema, and can persist single-book plus unified game-odds snapshots to D1."
   },
   {
     path: "/games/mlb/:gameId/odds",
     worker: "mlb-schedule",
     source_mode: "external_plus_db",
     verification_status: "verified",
-    tables: ["mlb_odds", "mlb_odds_history"],
-    notes: "Game odds are fetched from ESPN scoreboard competition odds, normalized into the SportsSenseAi odds schema, and can persist odds snapshots to D1."
+    tables: ["mlb_odds", "mlb_odds_history", "mlb_game_odds_books", "mlb_game_odds_books_history"],
+    notes: "Game odds are fetched from ESPN scoreboard competition odds, normalized into the SportsSenseAi odds schema, and enriched with unified book snapshots when available."
   },
   {
     path: "/games/mlb/:gameId/streams",
@@ -78,6 +86,46 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
     verification_status: "verified",
     tables: ["mlb_odds", "mlb_odds_history"],
     notes: "Line movement is computed from persisted D1 odds snapshots and refreshed from the ESPN scoreboard when the current game window is available."
+  },
+  {
+    path: "/games/mlb/:gameId/preview",
+    worker: "mlb-pregame",
+    source_mode: "external_plus_db",
+    verification_status: "partial",
+    tables: ["mlb_pregame_games", "mlb_statcast_previews", "mlb_game_context", "mlb_weather"],
+    notes: "Joined preview surface combining persisted pregame slate, Statcast preview, game context, and weather."
+  },
+  {
+    path: "/weather/mlb",
+    worker: "mlb-pregame",
+    source_mode: "external_plus_db",
+    verification_status: "partial",
+    tables: ["mlb_pregame_games", "mlb_weather", "mlb_game_context", "mlb_statcast_previews"],
+    notes: "Weather research page built from persisted pregame slate, weather, context, and preview presence."
+  },
+  {
+    path: "/pitchers/mlb",
+    worker: "mlb-pitchers",
+    source_mode: "external_plus_db",
+    verification_status: "partial",
+    tables: ["mlb_pitcher_stats", "mlb_pitcher_splits"],
+    notes: "Pitcher leaderboard served from D1 and refreshed from ESPN stats page, site roster metadata, and core stats when requested."
+  },
+  {
+    path: "/pitchers/mlb/:playerId",
+    worker: "mlb-pitchers",
+    source_mode: "db_only",
+    verification_status: "partial",
+    tables: ["mlb_pitcher_stats", "mlb_pitcher_splits"],
+    notes: "Full normalized pitcher profile served from D1."
+  },
+  {
+    path: "/pitchers/mlb/:playerId/splits",
+    worker: "mlb-pitchers",
+    source_mode: "db_only",
+    verification_status: "partial",
+    tables: ["mlb_pitcher_splits"],
+    notes: "Pitcher split ledger served from D1."
   },
   {
     path: "/sim/mlb",
@@ -138,10 +186,18 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
   {
     path: "/live/mlb",
     worker: "mlb-game-context",
-    source_mode: "db_or_mock",
+    source_mode: "external_plus_db",
     verification_status: "partial",
-    tables: ["mlb_live"],
-    notes: "Live game state uses the latest D1 row by default, and `refresh=1` rehydrates mlb_live from the ESPN summary feed before re-reading the snapshot."
+    tables: ["mlb_live", "mlb_gamecast_state", "mlb_gamecast_plays", "mlb_game_odds_books"],
+    notes: "Live game state uses the latest D1 row by default, and `refresh=1` rehydrates mlb_live from ESPN while pairing it with a persisted normalized Gamecast object."
+  },
+  {
+    path: "/games/mlb/:gameId/gamecast",
+    worker: "mlb-game-context",
+    source_mode: "external_plus_db",
+    verification_status: "partial",
+    tables: ["mlb_gamecast_state", "mlb_gamecast_plays", "mlb_game_odds_books", "mlb_live"],
+    notes: "Normalized Gamecast object built from ESPN summary, plays, boxscore, and persisted book odds."
   },
   {
     path: "/game-context/mlb",
@@ -220,6 +276,16 @@ export const DATA_HEALTH_TABLES = [
   "mlb_calibration",
   "mlb_odds",
   "mlb_odds_history",
+  "mlb_pregame_games",
+  "mlb_pregame_teams",
+  "mlb_pregame_venues",
+  "mlb_pitcher_stats",
+  "mlb_pitcher_splits",
+  "mlb_statcast_previews",
+  "mlb_game_odds_books",
+  "mlb_game_odds_books_history",
+  "mlb_gamecast_state",
+  "mlb_gamecast_plays",
   "mlb_weather",
   "mlb_umpires",
   "mlb_parks",
