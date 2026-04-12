@@ -358,7 +358,18 @@ function arrayOfRecords(value: unknown): AnyRecord[] {
 }
 
 async function fetchSavantSchedule(date: string): Promise<AnyRecord[]> {
-  return fetchJson<AnyRecord[]>(`${SAVANT_SCHEDULE_URL}?date=${formatSavantDate(date)}&format=json`);
+  const payload = await fetchJson<AnyRecord>(`${SAVANT_SCHEDULE_URL}?date=${formatSavantDate(date)}&format=json`);
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const directSchedule = arrayOfRecords(payload?.schedule);
+  if (directSchedule.length > 0) {
+    return directSchedule;
+  }
+
+  const datedGames = arrayOfRecords(payload?.schedule?.dates || payload?.dates).flatMap((entry) => arrayOfRecords(entry?.games));
+  return datedGames;
 }
 
 async function fetchSavantPreview(gamePk: number): Promise<AnyRecord> {

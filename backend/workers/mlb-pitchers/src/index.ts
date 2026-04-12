@@ -8,7 +8,22 @@ type AnyRecord = Record<string, any>;
 const ESPN_STATS_PAGE =
   "https://www.espn.com/mlb/stats/player/_/view/pitching/table/pitching/sort/wins/dir/desc";
 const ESPN_CORE_BASE = "https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb";
+const ESPN_CORE_ATHLETE_BASE = `${ESPN_CORE_BASE}/athletes`;
 const ESPN_SITE_TEAMS = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams";
+const ESPN_WEB_ATHLETE_BASE = "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes";
+
+type SitePitcherMeta = {
+  espnPlayerId: string;
+  name: string;
+  teamId: string | null;
+  teamAbbr: string | null;
+  teamName: string | null;
+  pos: string | null;
+  jersey: string | null;
+  status: string | null;
+  headshotUrl: string | null;
+  throws: string | null;
+};
 
 function stringOrNull(value: unknown): string | null {
   if (typeof value === "string") {
@@ -74,18 +89,183 @@ async function fetchText(url: string): Promise<string> {
 }
 
 function extractStatsPageJson(html: string): AnyRecord | null {
-  const patterns = [/window\.__espn_stats\s*=\s*(\{[\s\S]*?\});/, /__espn_stats\s*=\s*(\{[\s\S]*?\});/];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) {
-      try {
-        return JSON.parse(match[1]) as AnyRecord;
-      } catch {
-        return null;
+  const marker = 'statistics":';
+  const markerIndex = html.indexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  let start = markerIndex + marker.length;
+  while (start < html.length && html[start] !== "{") {
+    start += 1;
+  }
+
+  if (start >= html.length) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let end = start;
+
+  for (; end < html.length; end += 1) {
+    const char = html[end];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === "{") {
+        depth += 1;
+      } else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          break;
+        }
       }
     }
   }
-  return null;
+
+  if (depth !== 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(html.slice(start, end + 1)) as AnyRecord;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeEspnUrl(url: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+  return url.replace(/^http:\/\//i, "https://");
+}
+
+function extractEspnPlayerId(value: unknown): string | null {
+  const text = stringOrNull(value);
+  if (!text) {
+    return null;
+  }
+
+  const hrefMatch = text.match(/\/id\/(\d+)/);
+  if (hrefMatch?.[1]) {
+    return hrefMatch[1];
+  }
+
+  const uidMatch = text.match(/a:(\d+)/);
+  if (uidMatch?.[1]) {
+    return uidMatch[1];
+  }
+
+  const idMatch = text.match(/\b(\d{3,})\b/);
+  return idMatch?.[1] || null;
+}
+
+function statsListToMap(stats: unknown): Record<string, number | null> {
+  return Array.isArray(stats)
+    ? stats.reduce<Record<string, number | null>>((accumulator, stat) => {
+        const name = stringOrNull((stat as AnyRecord)?.name);
+        if (name) {
+          accumulator[name] = numberOrNull((stat as AnyRecord)?.value);
+        }
+        return accumulator;
+      }, {})
+    : {};
+}
+
+async function fetchSitePitcherMetadata(): Promise<SitePitcherMeta[]> {
+  const payload = await fetchJson<AnyRecord>(ESPN_SITE_TEAMS);
+  const teams = Array.isArray(payload?.sports?.[0]?.leagues?.[0]?.teams) ? payload.sports[0].leagues[0].teams : [];
+  const pitchers: SitePitcherMeta[] = [];
+
+  for (const entry of teams) {
+    const team = entry?.team;
+    const teamId = stringOrNull(team?.id);
+    if (!teamId) continue;
+
+    const roster = await fetchJson<AnyRecord>(`https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/${teamId}/roster`);
+    const athletes = Array.isArray(roster?.athletes)
+      ? roster.athletes.flatMap((group: AnyRecord) => (Array.isArray(group?.items) ? group.items : []))
+      : Array.isArray(roster?.athletes?.items)
+        ? roster.athletes.items
+        : [];
+
+    for (const athlete of athletes) {
+      const position = String(athlete?.position?.abbreviation || athlete?.position?.name || "");
+      if (!position.includes("P")) continue;
+      const espnPlayerId = extractEspnPlayerId(athlete?.id);
+      if (!espnPlayerId) continue;
+      pitchers.push({
+        espnPlayerId,
+        name: String(athlete?.fullName || athlete?.displayName || "Unknown pitcher"),
+        teamId,
+        teamAbbr: stringOrNull(team?.abbreviation),
+        teamName: stringOrNull(team?.displayName),
+        pos: stringOrNull(athlete?.position?.abbreviation) || "P",
+        jersey: stringOrNull(athlete?.jersey),
+        status: stringOrNull(athlete?.status?.type || athlete?.status?.name),
+        headshotUrl: stringOrNull(athlete?.headshot?.href || athlete?.headshot),
+        throws: stringOrNull(athlete?.throws || athlete?.displayHand || athlete?.hand)
+      });
+    }
+  }
+
+  const deduped = new Map<string, SitePitcherMeta>();
+  for (const pitcher of pitchers) {
+    deduped.set(pitcher.espnPlayerId, pitcher);
+  }
+  return [...deduped.values()];
+}
+
+function extractPitchingSplitStats(raw: AnyRecord): NormalizedPitcherSplit[] {
+  const names = Array.isArray(raw?.names) ? raw.names.map((entry: unknown) => String(entry)) : [];
+  const categories = Array.isArray(raw?.splitCategories) ? raw.splitCategories : [];
+
+  return categories.flatMap((category: AnyRecord) =>
+    (Array.isArray(category?.splits) ? category.splits : []).map((split: AnyRecord) => {
+      const values = Array.isArray(split?.stats) ? split.stats : [];
+      const statMap = names.reduce<Record<string, number | null>>((accumulator, name, index) => {
+        accumulator[name] = numberOrNull(values[index]);
+        return accumulator;
+      }, {});
+
+      return {
+        season: 0,
+        playerId: "",
+        splitCode: String(category?.name || split?.abbreviation || split?.displayName || "split"),
+        splitLabel: stringOrNull(split?.displayName || category?.displayName),
+        gp: statMap.gamesPlayed,
+        ip: statMap.innings || statMap.inningsPitched,
+        h: statMap.hits,
+        er: statMap.earnedRuns,
+        hr: statMap.homeRuns,
+        bb: statMap.walks || statMap.baseOnBalls,
+        k: statMap.strikeouts,
+        era: statMap.ERA || statMap.era,
+        whip: statMap.WHIP || statMap.whip,
+        k9: statMap.strikeoutsPerNineInnings || statMap.k9,
+        bb9: statMap.walksPerNineInnings || statMap.bb9,
+        hr9: statMap.homeRunsPerNineInnings || statMap.hr9,
+        kbb: statMap.strikeoutWalkRatio || statMap.kbb,
+        split: {
+          category: category?.displayName || category?.name || null,
+          stats: statMap
+        }
+      };
+    })
+  );
 }
 
 async function upsertPitcher(env: Env, season: number, row: Record<string, unknown>): Promise<void> {
@@ -135,39 +315,39 @@ async function upsertPitcher(env: Env, season: number, row: Record<string, unkno
   )
     .bind(
       season,
-      row.espn_player_id,
-      row.name,
-      row.team_id,
-      row.team_abbr,
-      row.team_name,
-      row.pos,
-      row.jersey,
-      row.status,
-      row.headshot_url,
-      row.throws,
-      row.gp,
-      row.gs,
-      row.qs,
-      row.w,
-      row.l,
-      row.sv,
-      row.hld,
-      row.ip,
-      row.h,
-      row.er,
-      row.hr,
-      row.bb,
-      row.k,
-      row.era,
-      row.whip,
-      row.k9,
-      row.bb9,
-      row.hr9,
-      row.kbb,
-      row.war,
-      row.splits_json,
-      row.raw_json,
-      row.scraped_at
+      row.espn_player_id ?? null,
+      row.name ?? null,
+      row.team_id ?? null,
+      row.team_abbr ?? null,
+      row.team_name ?? null,
+      row.pos ?? null,
+      row.jersey ?? null,
+      row.status ?? null,
+      row.headshot_url ?? null,
+      row.throws ?? null,
+      row.gp ?? null,
+      row.gs ?? null,
+      row.qs ?? null,
+      row.w ?? null,
+      row.l ?? null,
+      row.sv ?? null,
+      row.hld ?? null,
+      row.ip ?? null,
+      row.h ?? null,
+      row.er ?? null,
+      row.hr ?? null,
+      row.bb ?? null,
+      row.k ?? null,
+      row.era ?? null,
+      row.whip ?? null,
+      row.k9 ?? null,
+      row.bb9 ?? null,
+      row.hr9 ?? null,
+      row.kbb ?? null,
+      row.war ?? null,
+      row.splits_json ?? null,
+      row.raw_json ?? null,
+      row.scraped_at ?? null
     )
     .run();
 }
@@ -188,21 +368,21 @@ async function replacePitcherSplits(env: Env, season: number, playerId: string, 
       .bind(
         season,
         playerId,
-        split.splitCode,
-        split.splitLabel,
-        split.gp,
-        split.ip,
-        split.h,
-        split.er,
-        split.hr,
-        split.bb,
-        split.k,
-        split.era,
-        split.whip,
-        split.k9,
-        split.bb9,
-        split.hr9,
-        split.kbb,
+        split.splitCode ?? null,
+        split.splitLabel ?? null,
+        split.gp ?? null,
+        split.ip ?? null,
+        split.h ?? null,
+        split.er ?? null,
+        split.hr ?? null,
+        split.bb ?? null,
+        split.k ?? null,
+        split.era ?? null,
+        split.whip ?? null,
+        split.k9 ?? null,
+        split.bb9 ?? null,
+        split.hr9 ?? null,
+        split.kbb ?? null,
         JSON.stringify(split.split),
         new Date().toISOString()
       )
@@ -212,71 +392,71 @@ async function replacePitcherSplits(env: Env, season: number, playerId: string, 
 
 async function ingestPitchersFromStatsPage(env: Env, season: number): Promise<number> {
   const payload = extractStatsPageJson(await fetchText(ESPN_STATS_PAGE));
-  const players = Array.isArray(payload?.players) ? payload.players : [];
+  const players = Array.isArray(payload?.playerStats) ? payload.playerStats : [];
+  let count = 0;
   for (const player of players) {
-    const stats = player?.stats || {};
+    const athlete = player?.athlete || {};
+    const stats = statsListToMap(player?.stats);
+    const espnPlayerId = extractEspnPlayerId(athlete?.href || athlete?.uid);
+    if (!espnPlayerId) {
+      continue;
+    }
     await upsertPitcher(env, season, {
-      espn_player_id: String(player?.id || ""),
-      name: String(player?.name || "Unknown pitcher"),
-      team_id: stringOrNull(player?.teamId),
-      team_abbr: stringOrNull(player?.team),
-      pos: stringOrNull(player?.pos) || "P",
-      gp: numberOrNull(stats?.gp),
-      gs: numberOrNull(stats?.gs),
-      qs: numberOrNull(stats?.qs),
-      w: numberOrNull(stats?.w),
-      l: numberOrNull(stats?.l),
-      sv: numberOrNull(stats?.sv),
-      hld: numberOrNull(stats?.hld),
-      ip: numberOrNull(stats?.ip),
-      h: numberOrNull(stats?.h),
-      er: numberOrNull(stats?.er),
-      hr: numberOrNull(stats?.hr),
-      bb: numberOrNull(stats?.bb),
-      k: numberOrNull(stats?.k),
-      era: numberOrNull(stats?.era),
-      whip: numberOrNull(stats?.whip),
-      k9: numberOrNull(stats?.k9),
-      bb9: numberOrNull(stats?.bb9),
-      hr9: numberOrNull(stats?.hr9),
-      kbb: numberOrNull(stats?.kbb),
-      war: numberOrNull(stats?.war),
+      espn_player_id: espnPlayerId,
+      name: String(athlete?.name || athlete?.shortName || "Unknown pitcher"),
+      team_abbr: stringOrNull(athlete?.team),
+      pos: stringOrNull(athlete?.position) || "P",
+      gp: stats.gamesPlayed,
+      gs: stats.gamesStarted,
+      qs: stats.qualityStarts,
+      w: stats.wins,
+      l: stats.losses,
+      sv: stats.saves,
+      hld: stats.holds,
+      ip: stats.innings,
+      h: stats.hits,
+      er: stats.earnedRuns,
+      hr: stats.homeRuns,
+      bb: stats.walks,
+      k: stats.strikeouts,
+      era: stats.ERA,
+      whip: stats.WHIP,
+      k9: stats.strikeoutsPerNineInnings,
+      bb9: stats.walksPerNineInnings,
+      hr9: stats.homeRunsPerNineInnings,
+      kbb: stats.strikeoutWalkRatio,
+      war: stats.WARBR,
       raw_json: JSON.stringify(player),
       scraped_at: new Date().toISOString()
     });
+    count += 1;
   }
-  return players.length;
+  return count;
 }
 
 async function ingestPitcherSiteMetadata(env: Env, season: number): Promise<number> {
-  const payload = await fetchJson<AnyRecord>(ESPN_SITE_TEAMS);
-  const teams = Array.isArray(payload?.sports?.[0]?.leagues?.[0]?.teams) ? payload.sports[0].leagues[0].teams : [];
+  const pitchers = await fetchSitePitcherMetadata();
   let count = 0;
 
-  for (const entry of teams) {
-    const team = entry?.team;
-    const teamId = stringOrNull(team?.id);
-    if (!teamId) continue;
-    const roster = await fetchJson<AnyRecord>(`https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/${teamId}/roster`);
-    const athletes = Array.isArray(roster?.athletes) ? roster.athletes.flatMap((group: AnyRecord) => group?.items || []) : Array.isArray(roster?.athletes?.items) ? roster.athletes.items : [];
-    for (const athlete of athletes) {
-      const position = String(athlete?.position?.abbreviation || athlete?.position?.name || "");
-      if (!position.includes("P")) continue;
-      count += 1;
+  for (const pitcher of pitchers) {
+    try {
       await upsertPitcher(env, season, {
-        espn_player_id: String(athlete?.id || ""),
-        name: String(athlete?.fullName || athlete?.displayName || "Unknown pitcher"),
-        team_id: teamId,
-        team_abbr: stringOrNull(team?.abbreviation),
-        team_name: stringOrNull(team?.displayName),
-        pos: stringOrNull(athlete?.position?.abbreviation) || "P",
-        jersey: stringOrNull(athlete?.jersey),
-        status: stringOrNull(athlete?.status?.type || athlete?.status?.name),
-        headshot_url: stringOrNull(athlete?.headshot?.href || athlete?.headshot),
-        throws: stringOrNull(athlete?.displayHand || athlete?.hand),
-        raw_json: JSON.stringify(athlete),
+        espn_player_id: pitcher.espnPlayerId,
+        name: pitcher.name,
+        team_id: pitcher.teamId,
+        team_abbr: pitcher.teamAbbr,
+        team_name: pitcher.teamName,
+        pos: pitcher.pos,
+        jersey: pitcher.jersey,
+        status: pitcher.status,
+        headshot_url: pitcher.headshotUrl,
+        throws: pitcher.throws,
+        raw_json: JSON.stringify(pitcher),
         scraped_at: new Date().toISOString()
       });
+      count += 1;
+    } catch {
+      continue;
     }
   }
 
@@ -286,7 +466,13 @@ async function ingestPitcherSiteMetadata(env: Env, season: number): Promise<numb
 function extractCoreStatsMap(statsRoot: AnyRecord): Record<string, number | null> {
   const maps: Record<string, number | null> = {};
   const categories = Array.isArray(statsRoot?.splits?.categories) ? statsRoot.splits.categories : Array.isArray(statsRoot?.categories) ? statsRoot.categories : [];
-  for (const category of categories) {
+  const preferred = categories.find((category: AnyRecord) =>
+    String(category?.name || category?.displayName || "")
+      .toLowerCase()
+      .includes("pitch")
+  );
+
+  for (const category of preferred ? [preferred] : categories) {
     for (const stat of Array.isArray(category?.stats) ? category.stats : []) {
       const name = String(stat?.name || "");
       if (name) {
@@ -322,52 +508,64 @@ function normalizeCoreSplit(split: AnyRecord, season: number, playerId: string):
 }
 
 async function ingestPitchersFromCore(env: Env, season: number): Promise<number> {
-  const athletes = await fetchJson<AnyRecord>(`${ESPN_CORE_BASE}/seasons/${season}/athletes?limit=2000&active=true&position=P&stats=season`);
-  const items = Array.isArray(athletes?.items) ? athletes.items : [];
+  const pitchers = await fetchSitePitcherMetadata();
   let count = 0;
-  for (const item of items) {
-    const athlete = await fetchJson<AnyRecord>(String(item?.$ref || item?.href || item));
-    const statsRef = stringOrNull(athlete?.statistics?.$ref);
-    const teamRef = stringOrNull(athlete?.team?.$ref);
-    const statsRoot = statsRef ? await fetchJson<AnyRecord>(statsRef) : {};
-    const team = teamRef ? await fetchJson<AnyRecord>(teamRef) : athlete?.team || {};
-    const statsMap = extractCoreStatsMap(statsRoot);
-    const splitsRoot = stringOrNull(statsRoot?.splits?.$ref) ? await fetchJson<AnyRecord>(String(statsRoot.splits.$ref)) : statsRoot?.splits || {};
-    const splitItems = Array.isArray(splitsRoot?.items) ? splitsRoot.items : Array.isArray(splitsRoot?.splits) ? splitsRoot.splits : [];
-    const splits = splitItems.map((split: AnyRecord) => normalizeCoreSplit(split, season, String(athlete?.id || "")));
-    count += 1;
-    await upsertPitcher(env, season, {
-      espn_player_id: String(athlete?.id || ""),
-      name: String(athlete?.fullName || athlete?.displayName || "Unknown pitcher"),
-      team_id: stringOrNull(team?.id || athlete?.team?.id),
-      team_abbr: stringOrNull(team?.abbreviation || athlete?.team?.abbreviation),
-      team_name: stringOrNull(team?.displayName || athlete?.team?.displayName),
-      pos: stringOrNull(athlete?.position?.abbreviation) || "P",
-      gp: statsMap.games,
-      gs: statsMap.gamesStarted,
-      qs: statsMap.qualityStarts,
-      w: statsMap.wins,
-      l: statsMap.losses,
-      sv: statsMap.saves,
-      hld: statsMap.holds,
-      ip: statsMap.inningsPitched,
-      h: statsMap.hits,
-      er: statsMap.earnedRuns,
-      hr: statsMap.homeRuns,
-      bb: statsMap.baseOnBalls,
-      k: statsMap.strikeOuts,
-      era: statsMap.era,
-      whip: statsMap.whip,
-      k9: statsMap.strikeoutsPerNineInnings,
-      bb9: statsMap.walksPerNineInnings,
-      hr9: statsMap.homeRunsPerNineInnings,
-      kbb: statsMap.strikeoutWalkRatio,
-      war: statsMap.war,
-      splits_json: JSON.stringify(splitsRoot || null),
-      raw_json: JSON.stringify({ athlete, statsRoot, team }),
-      scraped_at: new Date().toISOString()
-    });
-    await replacePitcherSplits(env, season, String(athlete?.id || ""), splits);
+
+  for (const pitcher of pitchers) {
+    try {
+      const athlete = await fetchJson<AnyRecord>(`${ESPN_CORE_ATHLETE_BASE}/${pitcher.espnPlayerId}`);
+      const statsRef = normalizeEspnUrl(stringOrNull(athlete?.statistics?.$ref));
+      const teamRef = normalizeEspnUrl(stringOrNull(athlete?.team?.$ref));
+      const statsRoot = statsRef ? await fetchJson<AnyRecord>(statsRef) : {};
+      const team = teamRef ? await fetchJson<AnyRecord>(teamRef) : athlete?.team || {};
+      const statsMap = extractCoreStatsMap(statsRoot);
+      const webSplits = await fetchJson<AnyRecord>(`${ESPN_WEB_ATHLETE_BASE}/${pitcher.espnPlayerId}/splits`).catch(() => ({}));
+      const splits = extractPitchingSplitStats(webSplits).map((split) => ({
+        ...split,
+        season,
+        playerId: pitcher.espnPlayerId
+      }));
+
+      await upsertPitcher(env, season, {
+        espn_player_id: pitcher.espnPlayerId,
+        name: String(athlete?.fullName || athlete?.displayName || pitcher.name),
+        team_id: stringOrNull(team?.id || pitcher.teamId),
+        team_abbr: stringOrNull(team?.abbreviation || pitcher.teamAbbr),
+        team_name: stringOrNull(team?.displayName || pitcher.teamName),
+        pos: stringOrNull(athlete?.position?.abbreviation) || pitcher.pos || "P",
+        jersey: pitcher.jersey,
+        status: stringOrNull(athlete?.status?.type || athlete?.status?.name || pitcher.status),
+        headshot_url: stringOrNull(athlete?.headshot?.href || athlete?.headshot || pitcher.headshotUrl),
+        throws: stringOrNull(athlete?.throws?.displayValue || athlete?.throws || pitcher.throws),
+        gp: statsMap.gamesPlayed || statsMap.games,
+        gs: statsMap.gamesStarted,
+        qs: statsMap.qualityStarts,
+        w: statsMap.wins,
+        l: statsMap.losses,
+        sv: statsMap.saves,
+        hld: statsMap.holds,
+        ip: statsMap.inningsPitched || statsMap.innings,
+        h: statsMap.hits,
+        er: statsMap.earnedRuns,
+        hr: statsMap.homeRuns,
+        bb: statsMap.walks || statsMap.baseOnBalls,
+        k: statsMap.strikeouts || statsMap.strikeOuts,
+        era: statsMap.ERA || statsMap.era,
+        whip: statsMap.WHIP || statsMap.whip,
+        k9: statsMap.strikeoutsPerNineInnings,
+        bb9: statsMap.walksPerNineInnings,
+        hr9: statsMap.homeRunsPerNineInnings,
+        kbb: statsMap.strikeoutWalkRatio || statsMap.walkToStrikeoutRatio,
+        war: statsMap.WARBR || statsMap.war,
+        splits_json: JSON.stringify(webSplits || null),
+        raw_json: JSON.stringify({ athlete, statsRoot, team }),
+        scraped_at: new Date().toISOString()
+      });
+      await replacePitcherSplits(env, season, pitcher.espnPlayerId, splits);
+      count += 1;
+    } catch {
+      continue;
+    }
   }
   return count;
 }
