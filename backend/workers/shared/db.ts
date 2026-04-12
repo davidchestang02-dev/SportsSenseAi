@@ -1,12 +1,16 @@
 import type { Env } from "./types";
 
+function normalizeBindings(bindings: unknown[]): unknown[] {
+  return bindings.map((binding) => (binding === undefined ? null : binding));
+}
+
 export async function queryAll<T>(env: Env, sql: string, bindings: unknown[] = []): Promise<T[] | null> {
   if (!env.DB) {
     return null;
   }
 
   try {
-    const result = await env.DB.prepare(sql).bind(...bindings).all();
+    const result = await env.DB.prepare(sql).bind(...normalizeBindings(bindings)).all();
     return (result.results || []) as T[];
   } catch {
     return null;
@@ -24,7 +28,7 @@ export async function execute(env: Env, sql: string, bindings: unknown[] = []): 
   }
 
   try {
-    await env.DB.prepare(sql).bind(...bindings).run();
+    await env.DB.prepare(sql).bind(...normalizeBindings(bindings)).run();
     return true;
   } catch {
     return false;

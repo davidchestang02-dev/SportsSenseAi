@@ -234,18 +234,21 @@ function extractPitchingSplitStats(raw: AnyRecord): NormalizedPitcherSplit[] {
   const categories = Array.isArray(raw?.splitCategories) ? raw.splitCategories : [];
 
   return categories.flatMap((category: AnyRecord) =>
-    (Array.isArray(category?.splits) ? category.splits : []).map((split: AnyRecord) => {
+    (Array.isArray(category?.splits) ? category.splits : []).map((split: AnyRecord, index: number) => {
       const values = Array.isArray(split?.stats) ? split.stats : [];
       const statMap = names.reduce<Record<string, number | null>>((accumulator, name, index) => {
         accumulator[name] = numberOrNull(values[index]);
         return accumulator;
       }, {});
+      const categoryName = String(category?.name || "split");
+      const splitKey = stringOrNull(split?.abbreviation || split?.displayName || split?.name || split?.id) || `split-${index + 1}`;
+      const splitLabel = stringOrNull(split?.displayName) || splitKey;
 
       return {
         season: 0,
         playerId: "",
-        splitCode: String(category?.name || split?.abbreviation || split?.displayName || "split"),
-        splitLabel: stringOrNull(split?.displayName || category?.displayName),
+        splitCode: `${categoryName}:${splitKey}`,
+        splitLabel: stringOrNull(category?.displayName) ? `${String(category.displayName)} - ${splitLabel}` : splitLabel,
         gp: statMap.gamesPlayed,
         ip: statMap.innings || statMap.inningsPitched,
         h: statMap.hits,
@@ -260,7 +263,9 @@ function extractPitchingSplitStats(raw: AnyRecord): NormalizedPitcherSplit[] {
         hr9: statMap.homeRunsPerNineInnings || statMap.hr9,
         kbb: statMap.strikeoutWalkRatio || statMap.kbb,
         split: {
-          category: category?.displayName || category?.name || null,
+          category: category?.displayName || categoryName,
+          abbreviation: split?.abbreviation || null,
+          displayName: split?.displayName || null,
           stats: statMap
         }
       };
@@ -390,10 +395,14 @@ async function replacePitcherSplits(env: Env, season: number, playerId: string, 
   }
 }
 
-async function ingestPitchersFromStatsPage(env: Env, season: number): Promise<number> {
+async function ingestPitchersFromStatsPage(
+  env: Env,
+  season: number
+): Promise<{ count: number; pitcherIds: string[] }> {
   const payload = extractStatsPageJson(await fetchText(ESPN_STATS_PAGE));
   const players = Array.isArray(payload?.playerStats) ? payload.playerStats : [];
   let count = 0;
+  const pitcherIds: string[] = [];
   for (const player of players) {
     const athlete = player?.athlete || {};
     const stats = statsListToMap(player?.stats);
@@ -429,16 +438,17 @@ async function ingestPitchersFromStatsPage(env: Env, season: number): Promise<nu
       raw_json: JSON.stringify(player),
       scraped_at: new Date().toISOString()
     });
+    pitcherIds.push(espnPlayerId);
     count += 1;
   }
-  return count;
+  return { count, pitcherIds };
 }
 
-async function ingestPitcherSiteMetadata(env: Env, season: number): Promise<number> {
-  const pitchers = await fetchSitePitcherMetadata();
+async function ingestPitcherSiteMetadata(env: Env, season: number, pitchers: SitePitcherMeta[] = []): Promise<number> {
+  const sourcePitchers = pitchers.length > 0 ? pitchers : await fetchSitePitcherMetadata();
   let count = 0;
 
-  for (const pitcher of pitchers) {
+  for (const pitcher of sourcePitchers) {
     try {
       await upsertPitcher(env, season, {
         espn_player_id: pitcher.espnPlayerId,
@@ -461,6 +471,21 @@ async function ingestPitcherSiteMetadata(env: Env, season: number): Promise<numb
   }
 
   return count;
+}
+
+function buildFallbackSitePitcherMeta(playerId: string): SitePitcherMeta {
+  return {
+    espnPlayerId: playerId,
+    name: "Unknown pitcher",
+    teamId: null,
+    teamAbbr: null,
+    teamName: null,
+    pos: "P",
+    jersey: null,
+    status: null,
+    headshotUrl: null,
+    throws: null
+  };
 }
 
 function extractCoreStatsMap(statsRoot: AnyRecord): Record<string, number | null> {
@@ -507,74 +532,104 @@ function normalizeCoreSplit(split: AnyRecord, season: number, playerId: string):
   };
 }
 
-async function ingestPitchersFromCore(env: Env, season: number): Promise<number> {
-  const pitchers = await fetchSitePitcherMetadata();
+async function hydratePitcherFromCore(env: Env, season: number, pitcher: SitePitcherMeta): Promise<boolean> {
+  const athlete = await fetchJson<AnyRecord>(`${ESPN_CORE_ATHLETE_BASE}/${pitcher.espnPlayerId}`);
+  const statsRef = normalizeEspnUrl(stringOrNull(athlete?.statistics?.$ref));
+  const teamRef = normalizeEspnUrl(stringOrNull(athlete?.team?.$ref));
+  const statsRoot = statsRef ? await fetchJson<AnyRecord>(statsRef) : {};
+  const team = teamRef ? await fetchJson<AnyRecord>(teamRef) : athlete?.team || {};
+  const statsMap = extractCoreStatsMap(statsRoot);
+  const webSplits = await fetchJson<AnyRecord>(`${ESPN_WEB_ATHLETE_BASE}/${pitcher.espnPlayerId}/splits`).catch(() => ({}));
+  const splits = extractPitchingSplitStats(webSplits).map((split) => ({
+    ...split,
+    season,
+    playerId: pitcher.espnPlayerId
+  }));
+
+  await upsertPitcher(env, season, {
+    espn_player_id: pitcher.espnPlayerId,
+    name: String(athlete?.fullName || athlete?.displayName || pitcher.name),
+    team_id: stringOrNull(team?.id || pitcher.teamId),
+    team_abbr: stringOrNull(team?.abbreviation || pitcher.teamAbbr),
+    team_name: stringOrNull(team?.displayName || pitcher.teamName),
+    pos: stringOrNull(athlete?.position?.abbreviation) || pitcher.pos || "P",
+    jersey: stringOrNull(athlete?.jersey) || pitcher.jersey,
+    status: stringOrNull(athlete?.status?.type || athlete?.status?.name || pitcher.status),
+    headshot_url: stringOrNull(athlete?.headshot?.href || athlete?.headshot || pitcher.headshotUrl),
+    throws: stringOrNull(athlete?.throws?.displayValue || athlete?.throws || pitcher.throws),
+    gp: statsMap.gamesPlayed || statsMap.games,
+    gs: statsMap.gamesStarted,
+    qs: statsMap.qualityStarts,
+    w: statsMap.wins,
+    l: statsMap.losses,
+    sv: statsMap.saves,
+    hld: statsMap.holds,
+    ip: statsMap.inningsPitched || statsMap.innings,
+    h: statsMap.hits,
+    er: statsMap.earnedRuns,
+    hr: statsMap.homeRuns,
+    bb: statsMap.walks || statsMap.baseOnBalls,
+    k: statsMap.strikeouts || statsMap.strikeOuts,
+    era: statsMap.ERA || statsMap.era,
+    whip: statsMap.WHIP || statsMap.whip,
+    k9: statsMap.strikeoutsPerNineInnings,
+    bb9: statsMap.walksPerNineInnings,
+    hr9: statsMap.homeRunsPerNineInnings,
+    kbb: statsMap.strikeoutWalkRatio || statsMap.walkToStrikeoutRatio,
+    war: statsMap.WARBR || statsMap.war,
+    splits_json: JSON.stringify(webSplits || null),
+    raw_json: JSON.stringify({ athlete, statsRoot, team }),
+    scraped_at: new Date().toISOString()
+  });
+
+  if (splits.length > 0) {
+    await replacePitcherSplits(env, season, pitcher.espnPlayerId, splits);
+  }
+
+  return true;
+}
+
+async function ingestPitchersFromCore(
+  env: Env,
+  season: number,
+  sitePitchers: SitePitcherMeta[] = [],
+  targetPitcherIds: string[] = []
+): Promise<number> {
+  const pitchersById = new Map(sitePitchers.map((pitcher) => [pitcher.espnPlayerId, pitcher]));
+  const ids =
+    targetPitcherIds.length > 0
+      ? [...new Set(targetPitcherIds)]
+      : [...pitchersById.keys()].slice(0, 50);
   let count = 0;
 
-  for (const pitcher of pitchers) {
+  for (const pitcherId of ids) {
     try {
-      const athlete = await fetchJson<AnyRecord>(`${ESPN_CORE_ATHLETE_BASE}/${pitcher.espnPlayerId}`);
-      const statsRef = normalizeEspnUrl(stringOrNull(athlete?.statistics?.$ref));
-      const teamRef = normalizeEspnUrl(stringOrNull(athlete?.team?.$ref));
-      const statsRoot = statsRef ? await fetchJson<AnyRecord>(statsRef) : {};
-      const team = teamRef ? await fetchJson<AnyRecord>(teamRef) : athlete?.team || {};
-      const statsMap = extractCoreStatsMap(statsRoot);
-      const webSplits = await fetchJson<AnyRecord>(`${ESPN_WEB_ATHLETE_BASE}/${pitcher.espnPlayerId}/splits`).catch(() => ({}));
-      const splits = extractPitchingSplitStats(webSplits).map((split) => ({
-        ...split,
-        season,
-        playerId: pitcher.espnPlayerId
-      }));
-
-      await upsertPitcher(env, season, {
-        espn_player_id: pitcher.espnPlayerId,
-        name: String(athlete?.fullName || athlete?.displayName || pitcher.name),
-        team_id: stringOrNull(team?.id || pitcher.teamId),
-        team_abbr: stringOrNull(team?.abbreviation || pitcher.teamAbbr),
-        team_name: stringOrNull(team?.displayName || pitcher.teamName),
-        pos: stringOrNull(athlete?.position?.abbreviation) || pitcher.pos || "P",
-        jersey: pitcher.jersey,
-        status: stringOrNull(athlete?.status?.type || athlete?.status?.name || pitcher.status),
-        headshot_url: stringOrNull(athlete?.headshot?.href || athlete?.headshot || pitcher.headshotUrl),
-        throws: stringOrNull(athlete?.throws?.displayValue || athlete?.throws || pitcher.throws),
-        gp: statsMap.gamesPlayed || statsMap.games,
-        gs: statsMap.gamesStarted,
-        qs: statsMap.qualityStarts,
-        w: statsMap.wins,
-        l: statsMap.losses,
-        sv: statsMap.saves,
-        hld: statsMap.holds,
-        ip: statsMap.inningsPitched || statsMap.innings,
-        h: statsMap.hits,
-        er: statsMap.earnedRuns,
-        hr: statsMap.homeRuns,
-        bb: statsMap.walks || statsMap.baseOnBalls,
-        k: statsMap.strikeouts || statsMap.strikeOuts,
-        era: statsMap.ERA || statsMap.era,
-        whip: statsMap.WHIP || statsMap.whip,
-        k9: statsMap.strikeoutsPerNineInnings,
-        bb9: statsMap.walksPerNineInnings,
-        hr9: statsMap.homeRunsPerNineInnings,
-        kbb: statsMap.strikeoutWalkRatio || statsMap.walkToStrikeoutRatio,
-        war: statsMap.WARBR || statsMap.war,
-        splits_json: JSON.stringify(webSplits || null),
-        raw_json: JSON.stringify({ athlete, statsRoot, team }),
-        scraped_at: new Date().toISOString()
-      });
-      await replacePitcherSplits(env, season, pitcher.espnPlayerId, splits);
-      count += 1;
+      const pitcher = pitchersById.get(pitcherId) || buildFallbackSitePitcherMeta(pitcherId);
+      const hydrated = await hydratePitcherFromCore(env, season, pitcher);
+      if (hydrated) {
+        count += 1;
+      }
     } catch {
       continue;
     }
   }
+
   return count;
 }
 
+async function syncPitcherById(env: Env, season: number, playerId: string): Promise<boolean> {
+  const sitePitchers = await fetchSitePitcherMetadata().catch(() => []);
+  const pitcher = sitePitchers.find((entry) => entry.espnPlayerId === playerId) || buildFallbackSitePitcherMeta(playerId);
+  return hydratePitcherFromCore(env, season, pitcher).catch(() => false);
+}
+
 export async function syncPitchers(env: Env, season: number): Promise<{ statsPage: number; site: number; core: number }> {
-  const statsPage = await ingestPitchersFromStatsPage(env, season).catch(() => 0);
-  const site = await ingestPitcherSiteMetadata(env, season).catch(() => 0);
-  const core = await ingestPitchersFromCore(env, season).catch(() => 0);
-  return { statsPage, site, core };
+  const sitePitchers = await fetchSitePitcherMetadata().catch(() => []);
+  const statsPage = await ingestPitchersFromStatsPage(env, season).catch(() => ({ count: 0, pitcherIds: [] as string[] }));
+  const site = await ingestPitcherSiteMetadata(env, season, sitePitchers).catch(() => 0);
+  const coreTargets = statsPage.pitcherIds.length > 0 ? statsPage.pitcherIds : sitePitchers.slice(0, 50).map((pitcher) => pitcher.espnPlayerId);
+  const core = await ingestPitchersFromCore(env, season, sitePitchers, coreTargets).catch(() => 0);
+  return { statsPage: statsPage.count, site, core };
 }
 
 function mapPitcherRow(row: Record<string, unknown>, splits: NormalizedPitcherSplit[]): NormalizedPitcherStats {
@@ -677,24 +732,30 @@ export async function handlePitchersRequest(request: Request, env: Env): Promise
 
     const statsMatch = path.match(/^\/pitchers\/mlb\/([^/]+)$/);
     if (statsMatch) {
-      const splits =
-        (await queryAll<Record<string, unknown>>(
-          env,
-          "SELECT * FROM mlb_pitcher_splits WHERE season = ? AND espn_player_id = ? ORDER BY split_label",
-          [season, statsMatch[1]]
-        )) || [];
       let row = await queryFirst<Record<string, unknown>>(
         env,
         "SELECT * FROM mlb_pitcher_stats WHERE season = ? AND espn_player_id = ? LIMIT 1",
         [season, statsMatch[1]]
       );
-      if (!row && refresh) {
-        await syncPitchers(env, season);
+      let splits =
+        (await queryAll<Record<string, unknown>>(
+          env,
+          "SELECT * FROM mlb_pitcher_splits WHERE season = ? AND espn_player_id = ? ORDER BY split_label",
+          [season, statsMatch[1]]
+        )) || [];
+      if ((refresh || !row || splits.length === 0) && env.DB) {
+        await syncPitcherById(env, season, statsMatch[1]);
         row = await queryFirst<Record<string, unknown>>(
           env,
           "SELECT * FROM mlb_pitcher_stats WHERE season = ? AND espn_player_id = ? LIMIT 1",
           [season, statsMatch[1]]
         );
+        splits =
+          (await queryAll<Record<string, unknown>>(
+            env,
+            "SELECT * FROM mlb_pitcher_splits WHERE season = ? AND espn_player_id = ? ORDER BY split_label",
+            [season, statsMatch[1]]
+          )) || [];
       }
       if (!row) {
         return json({ error: "Pitcher not found" }, 404, env);
@@ -734,12 +795,21 @@ export async function handlePitchersRequest(request: Request, env: Env): Promise
 
     const splitsMatch = path.match(/^\/pitchers\/mlb\/([^/]+)\/splits$/);
     if (splitsMatch) {
-      const splits =
+      let splits =
         (await queryAll<Record<string, unknown>>(
           env,
           "SELECT * FROM mlb_pitcher_splits WHERE season = ? AND espn_player_id = ? ORDER BY split_label",
           [season, splitsMatch[1]]
         )) || [];
+      if ((refresh || splits.length === 0) && env.DB) {
+        await syncPitcherById(env, season, splitsMatch[1]);
+        splits =
+          (await queryAll<Record<string, unknown>>(
+            env,
+            "SELECT * FROM mlb_pitcher_splits WHERE season = ? AND espn_player_id = ? ORDER BY split_label",
+            [season, splitsMatch[1]]
+          )) || [];
+      }
       return jsonWithSourceMeta(
         request,
         {

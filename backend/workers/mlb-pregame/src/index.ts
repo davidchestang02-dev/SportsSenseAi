@@ -124,7 +124,7 @@ function parsePregameGame(baseGame: {
 }
 
 async function persistPregameGame(env: Env, date: string, game: NormalizedPregameGame): Promise<void> {
-  await execute(
+  const persistedGame = await execute(
     env,
     `INSERT OR REPLACE INTO mlb_pregame_games (
       date, game_id, league, start_time, status, summary, season, season_type,
@@ -157,12 +157,15 @@ async function persistPregameGame(env: Env, date: string, game: NormalizedPregam
       game.updatedAt || new Date().toISOString()
     ]
   );
+  if (!persistedGame) {
+    throw new Error(`Failed to persist pregame game ${game.gameId}`);
+  }
 
   for (const entry of [
     { side: "home", team: game.teams.home },
     { side: "away", team: game.teams.away }
   ]) {
-    await execute(
+    const persistedTeam = await execute(
       env,
       `INSERT OR REPLACE INTO mlb_pregame_teams (
         date, game_id, side, team_id, abbreviation, display_name, record_summary,
@@ -185,9 +188,12 @@ async function persistPregameGame(env: Env, date: string, game: NormalizedPregam
         game.updatedAt || new Date().toISOString()
       ]
     );
+    if (!persistedTeam) {
+      throw new Error(`Failed to persist pregame ${entry.side} team for ${game.gameId}`);
+    }
   }
 
-  await execute(
+  const persistedVenue = await execute(
     env,
     `INSERT OR REPLACE INTO mlb_pregame_venues (
       date, game_id, venue_name, city, state, roof_type, payload_json, updated_at
@@ -203,6 +209,9 @@ async function persistPregameGame(env: Env, date: string, game: NormalizedPregam
       game.updatedAt || new Date().toISOString()
     ]
   );
+  if (!persistedVenue) {
+    throw new Error(`Failed to persist pregame venue for ${game.gameId}`);
+  }
 }
 
 async function loadPregameGames(env: Env, date: string): Promise<NormalizedPregameGame[]> {
@@ -357,6 +366,19 @@ function arrayOfRecords(value: unknown): AnyRecord[] {
   return Array.isArray(value) ? value.filter((entry) => entry && typeof entry === "object") as AnyRecord[] : [];
 }
 
+function extractScheduleTeamAbbreviation(scheduleRow: AnyRecord, side: "home" | "away"): string | null {
+  const team = scheduleRow?.teams?.[side]?.team || {};
+  return teamAlias(
+    stringOrNull(
+      team?.abbreviation ||
+        team?.teamCode ||
+        team?.fileCode ||
+        scheduleRow?.[`${side}_team`] ||
+        scheduleRow?.[`${side}Team`]
+    )
+  );
+}
+
 async function fetchSavantSchedule(date: string): Promise<AnyRecord[]> {
   const payload = await fetchJson<AnyRecord>(`${SAVANT_SCHEDULE_URL}?date=${formatSavantDate(date)}&format=json`);
   if (Array.isArray(payload)) {
@@ -377,13 +399,55 @@ async function fetchSavantPreview(gamePk: number): Promise<AnyRecord> {
 }
 
 function matchPregameGame(scheduleRow: AnyRecord, games: NormalizedPregameGame[]): NormalizedPregameGame | null {
-  const home = teamAlias(stringOrNull(scheduleRow?.home_team || scheduleRow?.homeTeam));
-  const away = teamAlias(stringOrNull(scheduleRow?.away_team || scheduleRow?.awayTeam));
+  const home = extractScheduleTeamAbbreviation(scheduleRow, "home");
+  const away = extractScheduleTeamAbbreviation(scheduleRow, "away");
   return (
     games.find(
       (game) => teamAlias(game.teams.home.abbreviation) === home && teamAlias(game.teams.away.abbreviation) === away
     ) || null
   );
+}
+
+function normalizeFallbackStatcastPitcher(row: AnyRecord | null, team: string) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    playerId: numberOrNull(row?.id || row?.player_id || row?.playerId),
+    name: String(row?.fullName || row?.player_name || row?.playerName || row?.name || "Unknown pitcher"),
+    team,
+    throws: stringOrNull(row?.pitchHand?.description || row?.pitchHand?.code || row?.throws || row?.pitch_hand),
+    ip: null,
+    xERA: null,
+    xwOBA: null,
+    kPct: null,
+    bbPct: null,
+    barrelPctAllowed: null,
+    avgEVAllowed: null,
+    pitchMix: {}
+  };
+}
+
+function normalizeStatcastScheduleFallback(scheduleRow: AnyRecord, game: NormalizedPregameGame, fallbackDate: string): StatcastPreview {
+  const homeTeam = game.teams.home.abbreviation || game.teams.home.name;
+  const awayTeam = game.teams.away.abbreviation || game.teams.away.name;
+
+  return {
+    gameId: game.gameId,
+    gamePk: numberOrNull(scheduleRow?.gamePk || scheduleRow?.game_pk),
+    date: stringOrNull(scheduleRow?.officialDate || scheduleRow?.gameDate || scheduleRow?.date) || fallbackDate,
+    homeTeam,
+    awayTeam,
+    hittersHome: [],
+    hittersAway: [],
+    pitcherHome: normalizeFallbackStatcastPitcher(scheduleRow?.teams?.home?.probablePitcher || null, homeTeam),
+    pitcherAway: normalizeFallbackStatcastPitcher(scheduleRow?.teams?.away?.probablePitcher || null, awayTeam),
+    raw: {
+      source: "savant_schedule_fallback",
+      schedule: scheduleRow
+    }
+  };
 }
 
 function normalizeStatcastPreview(raw: AnyRecord, gameId: string, fallbackDate: string, homeTeam: string, awayTeam: string): StatcastPreview {
@@ -457,7 +521,7 @@ function normalizeStatcastPreview(raw: AnyRecord, gameId: string, fallbackDate: 
 }
 
 async function persistStatcastPreview(env: Env, preview: StatcastPreview): Promise<void> {
-  await execute(
+  const persistedPreview = await execute(
     env,
     `INSERT OR REPLACE INTO mlb_statcast_previews (
       game_id, game_pk, date, home_team, away_team, summary, preview_json, created_at
@@ -473,6 +537,9 @@ async function persistStatcastPreview(env: Env, preview: StatcastPreview): Promi
       new Date().toISOString()
     ]
   );
+  if (!persistedPreview) {
+    throw new Error(`Failed to persist Statcast preview for ${preview.gameId}`);
+  }
 }
 
 async function ensureStatcastPreviews(env: Env, date: string, refresh: boolean): Promise<StatcastPreview[]> {
@@ -496,15 +563,19 @@ async function ensureStatcastPreviews(env: Env, date: string, refresh: boolean):
     if (!game || gamePk === null) {
       continue;
     }
+
     try {
-      const rawPreview = await fetchSavantPreview(gamePk);
-      const preview = normalizeStatcastPreview(
-        rawPreview,
-        game.gameId,
-        date,
-        game.teams.home.abbreviation || game.teams.home.name,
-        game.teams.away.abbreviation || game.teams.away.name
-      );
+      const preview = await fetchSavantPreview(gamePk)
+        .then((rawPreview) =>
+          normalizeStatcastPreview(
+            rawPreview,
+            game.gameId,
+            date,
+            game.teams.home.abbreviation || game.teams.home.name,
+            game.teams.away.abbreviation || game.teams.away.name
+          )
+        )
+        .catch(() => normalizeStatcastScheduleFallback(scheduleRow, game, date));
       await persistStatcastPreview(env, preview);
       previews.push(preview);
     } catch {
