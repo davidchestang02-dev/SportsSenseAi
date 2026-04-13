@@ -589,6 +589,37 @@ async function hydratePitcherFromCore(env: Env, season: number, pitcher: SitePit
   return true;
 }
 
+async function hydratePitcherSplits(env: Env, season: number, pitcher: SitePitcherMeta): Promise<boolean> {
+  const webSplits = await fetchJson<AnyRecord>(`${ESPN_WEB_ATHLETE_BASE}/${pitcher.espnPlayerId}/splits`).catch(() => ({}));
+  const splits = extractPitchingSplitStats(webSplits).map((split) => ({
+    ...split,
+    season,
+    playerId: pitcher.espnPlayerId
+  }));
+
+  if (splits.length === 0) {
+    return false;
+  }
+
+  await upsertPitcher(env, season, {
+    espn_player_id: pitcher.espnPlayerId,
+    name: pitcher.name,
+    team_id: pitcher.teamId,
+    team_abbr: pitcher.teamAbbr,
+    team_name: pitcher.teamName,
+    pos: pitcher.pos,
+    jersey: pitcher.jersey,
+    status: pitcher.status,
+    headshot_url: pitcher.headshotUrl,
+    throws: pitcher.throws,
+    splits_json: JSON.stringify(webSplits || null),
+    raw_json: JSON.stringify(pitcher),
+    scraped_at: new Date().toISOString()
+  });
+  await replacePitcherSplits(env, season, pitcher.espnPlayerId, splits);
+  return true;
+}
+
 async function ingestPitchersFromCore(
   env: Env,
   season: number,
@@ -605,7 +636,7 @@ async function ingestPitchersFromCore(
   for (const pitcherId of ids) {
     try {
       const pitcher = pitchersById.get(pitcherId) || buildFallbackSitePitcherMeta(pitcherId);
-      const hydrated = await hydratePitcherFromCore(env, season, pitcher);
+      const hydrated = await hydratePitcherSplits(env, season, pitcher);
       if (hydrated) {
         count += 1;
       }
@@ -627,7 +658,10 @@ export async function syncPitchers(env: Env, season: number): Promise<{ statsPag
   const sitePitchers = await fetchSitePitcherMetadata().catch(() => []);
   const statsPage = await ingestPitchersFromStatsPage(env, season).catch(() => ({ count: 0, pitcherIds: [] as string[] }));
   const site = await ingestPitcherSiteMetadata(env, season, sitePitchers).catch(() => 0);
-  const coreTargets = statsPage.pitcherIds.length > 0 ? statsPage.pitcherIds : sitePitchers.slice(0, 50).map((pitcher) => pitcher.espnPlayerId);
+  const coreTargets = (statsPage.pitcherIds.length > 0
+    ? statsPage.pitcherIds
+    : sitePitchers.map((pitcher) => pitcher.espnPlayerId)
+  ).slice(0, 18);
   const core = await ingestPitchersFromCore(env, season, sitePitchers, coreTargets).catch(() => 0);
   return { statsPage: statsPage.count, site, core };
 }
