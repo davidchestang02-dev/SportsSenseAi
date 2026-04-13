@@ -675,7 +675,9 @@
 
 .sparklineBlock,
 .projectionSummary,
-.splitBlock {
+.splitBlock,
+.marketCatalogBlock,
+.modelLadderBlock {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
@@ -769,6 +771,39 @@
 .splitRow > div {
   display: grid;
   gap: 0.2rem;
+}
+
+.catalogTable {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.catalogHeader,
+.catalogRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) repeat(4, minmax(0, 0.8fr));
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.catalogHeader {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.catalogRow {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.84rem;
+}
+
+.catalogHeaderCompact,
+.catalogRowCompact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .skeletonBlock {

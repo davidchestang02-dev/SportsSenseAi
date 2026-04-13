@@ -278,6 +278,124 @@ function booksSummary(selectedBooks) {
   return selectedBooks.map((book) => SPORTSBOOK_LABELS[book]).join(", ");
 }
 
+function formatAmerican(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) {
+    return "--";
+  }
+  return `${number > 0 ? "+" : ""}${Math.round(number)}`;
+}
+
+function normalizePropGroup(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("strike")) {
+    return "K";
+  }
+  if (text.includes("totalbase") || text.includes("player bases") || text === "tb" || text.includes("tb")) {
+    return "TB";
+  }
+  if (text.includes("home") && text.includes("run")) {
+    return "HR";
+  }
+  if (text.includes("hits + runs + rbis") || text.includes("h+r+rbi") || text.includes("hrr")) {
+    return "HRR";
+  }
+  if (text.includes("hit")) {
+    return "HITS";
+  }
+  if (text.includes("walk")) {
+    return "BB";
+  }
+  return String(value || "").toUpperCase();
+}
+
+function formatPropLabel(value) {
+  const group = normalizePropGroup(value);
+  if (group === "HRR") {
+    return "H+R+RBI";
+  }
+  return group;
+}
+
+function factorial(value) {
+  if (value <= 1) {
+    return 1;
+  }
+
+  let result = 1;
+  for (let index = 2; index <= value; index += 1) {
+    result *= index;
+  }
+  return result;
+}
+
+function poissonAtLeast(mean, threshold) {
+  const lambda = Math.max(Number(mean || 0), 0.01);
+  const cutoff = Math.max(Math.ceil(Number(threshold || 0)), 0);
+  let cumulative = 0;
+  for (let k = 0; k < cutoff; k += 1) {
+    cumulative += (Math.exp(-lambda) * lambda ** k) / factorial(k);
+  }
+  return Math.max(0, Math.min(1, 1 - cumulative));
+}
+
+function ladderLinesForProp(prop) {
+  if (!prop) {
+    return [];
+  }
+
+  if (prop.propType === "HR") {
+    return [0.5, 1.5];
+  }
+  if (prop.propType === "HITS") {
+    return [0.5, 1.5, 2.5];
+  }
+  if (prop.propType === "TB") {
+    return [0.5, 1.5, 2.5, 3.5];
+  }
+  if (prop.propType === "K") {
+    const base = Number(prop.line || 5.5);
+    return [base - 1, base, base + 1, base + 2].map((value) => Math.max(0.5, Math.round(value * 2) / 2));
+  }
+  return [Number(prop.line || 0.5)];
+}
+
+function buildModelLadder(prop) {
+  if (!prop) {
+    return [];
+  }
+
+  return Array.from(new Set(ladderLinesForProp(prop))).map((line) => {
+    const overProb = poissonAtLeast(prop?.model?.mean, line);
+    return {
+      line,
+      overProb,
+      underProb: 1 - overProb,
+      edge: round(Number(prop?.model?.mean || 0) - line, 2)
+    };
+  });
+}
+
+function buildPlayerMarketCatalog(game, prop) {
+  if (!game || !prop) {
+    return [];
+  }
+
+  return (game.marketRows || [])
+    .filter((market) => String(market?.player_id || "") === String(prop.playerId))
+    .sort((left, right) => Number(right.edge || 0) - Number(left.edge || 0))
+    .slice(0, 10)
+    .map((market) => ({
+      key: `${market.player_id}-${market.prop_type}-${market.best_book}`,
+      label: formatPropLabel(market.prop_type),
+      posted: formatAmerican(market.posted_american),
+      fair: formatAmerican(market.fair_american),
+      book: market.best_book || "--",
+      edge: Number(market.edge || 0),
+      confidence: Number(market.confidence || 0)
+    }));
+}
+
 function venueLabel(game) {
   const venue = game?.ballpark?.name;
   const place = [game?.ballpark?.city, game?.ballpark?.state].filter(Boolean).join(", ");
@@ -793,6 +911,91 @@ export function PlayerProfileCard({ selectedProp, previewHitter }) {
   );
 }
 
+export function PlayerMarketCatalogCard({ game, selectedProp }) {
+  if (!game || !selectedProp) {
+    return (
+      <section className={styles.sidebarCard}>
+        <div className={styles.sidebarCardHeader}>
+          <span>Market catalog</span>
+          <strong>Awaiting selection</strong>
+        </div>
+        <p className={styles.sidebarEmpty}>
+          Once a player is selected, this panel will show the current player market rows we have from the app plus a SportsSenseAi ladder around the active line.
+        </p>
+      </section>
+    );
+  }
+
+  const catalogRows = buildPlayerMarketCatalog(game, selectedProp);
+  const ladderRows = buildModelLadder(selectedProp);
+
+  return (
+    <section className={styles.sidebarCard}>
+      <div className={styles.sidebarCardHeader}>
+        <span>Market catalog</span>
+        <strong>{selectedProp.playerName}</strong>
+      </div>
+
+      <div className={styles.marketCatalogBlock}>
+        <div className={styles.sparklineHeader}>
+          <strong>Best available rows</strong>
+          <span>Current app market feed</span>
+        </div>
+        {catalogRows.length > 0 ? (
+        <div className={styles.catalogTable}>
+          <div className={styles.catalogHeader}>
+            <span>Prop</span>
+            <span>Posted</span>
+            <span>Fair</span>
+            <span>Book</span>
+            <span>Edge</span>
+            </div>
+            {catalogRows.map((row) => (
+              <div key={row.key} className={styles.catalogRow}>
+                <strong>{row.label}</strong>
+                <span>{row.posted}</span>
+                <span>{row.fair}</span>
+                <span>{row.book}</span>
+                <span className={getEdgeClass(row.edge)}>{formatEdge(row.edge)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.sidebarEmpty}>
+            No direct player market rows were returned for this game yet, so the ladder below is model-only.
+          </p>
+        )}
+      </div>
+
+      <div className={styles.modelLadderBlock}>
+        <div className={styles.sparklineHeader}>
+          <strong>SportsSenseAi ladder</strong>
+          <span>Model-derived line sweep</span>
+        </div>
+        <div className={styles.catalogTable}>
+          <div className={`${styles.catalogHeader} ${styles.catalogHeaderCompact}`}>
+            <span>Line</span>
+            <span>Over%</span>
+            <span>Under%</span>
+            <span>Edge</span>
+          </div>
+          {ladderRows.map((row) => (
+            <div
+              key={`${selectedProp.playerId}-${selectedProp.propType}-${row.line}`}
+              className={`${styles.catalogRow} ${styles.catalogRowCompact}`}
+            >
+              <strong>{row.line}</strong>
+              <span className={getProbabilityClass(row.overProb)}>{formatProbability(row.overProb)}</span>
+              <span>{formatProbability(row.underProb)}</span>
+              <span className={getEdgeClass(row.edge)}>{formatEdge(row.edge)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function PitcherMatchupCard({ pitcherCard, loading }) {
   if (loading) {
     return (
@@ -1111,6 +1314,7 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
 
         <aside className={styles.rightColumn}>
           <PlayerProfileCard selectedProp={selectedProp} previewHitter={previewHitter} />
+          <PlayerMarketCatalogCard game={selectedGame} selectedProp={selectedProp} />
           <PitcherMatchupCard pitcherCard={pitcherCard} loading={preview.loading || pitcherProfile.loading} />
         </aside>
       </div>

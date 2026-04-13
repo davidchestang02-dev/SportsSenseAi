@@ -592,9 +592,14 @@ export function buildMlbPropsGames({ bundle, pregameSlate, weatherBoard, include
         home: countBattingOrderPlayers(game?.homeBattingOrder),
         away: countBattingOrderPlayers(game?.visitorBattingOrder)
       },
+      marketRows: markets.filter((market) => String(market?.game_id || "") === String(game.gameId || game.gamePk || "")),
       marketCount: Array.isArray(game?.odds) ? game.odds.length : 0,
       sourceShape: game?.visitorTeam ? "propfinder_like" : "ssa"
     };
+
+    const marketRows = contractGame.marketRows || [];
+    contractGame.marketCount = Math.max(contractGame.marketCount || 0, marketRows.length);
+    contractGame.sourceBooks = Array.from(new Set(marketRows.map((market) => market.best_book).filter(Boolean)));
 
     const gamePlayers = simulationPlayers.filter((row) => String(row?.game_id || "") === String(contractGame.gameId));
     const props = gamePlayers.length > 0 ? createPropRowsFromSimulation(contractGame, gamePlayers, markets) : createFallbackProps(contractGame);
