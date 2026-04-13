@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { getPlayerHeadshotUrl, getTeamBrand, getTeamLabel, getTeamLogoUrl, playerInitials } from "./media";
+import { getPlayerHeadshotCandidates, getTeamBrand, getTeamLabel, getTeamLogoCandidates, playerInitials } from "./media";
 
 export function fmtPercent(value) {
   return `${Math.round((Number(value) || 0) * 100)}%`;
@@ -34,10 +34,15 @@ export function fmtDecimal(value) {
 }
 
 export function TeamMark({ team, compact = false }) {
-  const [broken, setBroken] = useState(false);
+  const logoCandidates = getTeamLogoCandidates(team);
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const brand = getTeamBrand(team);
-  const logoUrl = getTeamLogoUrl(team);
   const label = getTeamLabel(team);
+  const logoUrl = logoCandidates[candidateIndex] || "";
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [logoCandidates.join("|")]);
 
   return (
     <span className={`team-pill${compact ? " compact" : ""}`}>
@@ -47,8 +52,8 @@ export function TeamMark({ team, compact = false }) {
           background: `linear-gradient(135deg, ${brand.color}, ${brand.alternateColor})`
         }}
       >
-        {logoUrl && !broken ? (
-          <img src={logoUrl} alt={`${label} logo`} onError={() => setBroken(true)} />
+        {logoUrl ? (
+          <img src={logoUrl} alt={`${label} logo`} onError={() => setCandidateIndex((current) => current + 1)} />
         ) : (
           <span>{brand.abbreviation}</span>
         )}
@@ -59,14 +64,20 @@ export function TeamMark({ team, compact = false }) {
 }
 
 export function PlayerPortrait({ player }) {
-  const [broken, setBroken] = useState(false);
+  const headshotCandidates = getPlayerHeadshotCandidates(player);
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const playerName = player?.fullName || player?.player_name || "Player";
   const alt = `${playerName} portrait`;
+  const src = headshotCandidates[candidateIndex] || "";
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [headshotCandidates.join("|")]);
 
   return (
     <div className="portrait">
-      {!broken ? (
-        <img src={getPlayerHeadshotUrl(player)} alt={alt} onError={() => setBroken(true)} />
+      {src ? (
+        <img src={src} alt={alt} onError={() => setCandidateIndex((current) => current + 1)} />
       ) : (
         <span>{playerInitials(playerName)}</span>
       )}

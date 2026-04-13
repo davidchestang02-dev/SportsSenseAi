@@ -17,14 +17,14 @@ const LineupsPage = lazy(() => import("./pages").then((module) => ({ default: mo
 
 const navItems = [
   { to: "/", label: "Home", end: true },
-  { to: "/command-center", label: "Command" },
+  { to: "/command-center", label: "Board" },
+  { to: "/games", label: "Matchups" },
+  { to: "/mlb", label: "Props" },
+  { to: "/live", label: "Live" },
   { to: "/teams", label: "Teams" },
-  { to: "/games", label: "Games" },
   { to: "/players", label: "Players" },
   { to: "/pitchers", label: "Pitchers" },
   { to: "/weather", label: "Weather" },
-  { to: "/mlb", label: "MLB Props" },
-  { to: "/live", label: "Live Ops" },
   { to: "/lineups", label: "Lineups" }
 ];
 
@@ -33,11 +33,11 @@ function SiteHeader({ selectedDate, setSelectedDate, health }) {
     <header className="site-header">
       <div className="site-header-row">
         <div className="brand-unit">
-          <img className="brand-unit-logo" src="/favicon.svg" alt="SportsSense AI mark" />
+          <img className="brand-unit-logo" src="/brand/growth-connectivity-icon.png" alt="SportsSense AI mark" />
           <div className="brand-unit-copy">
-            <span className="brand-kicker">SportsSense AI</span>
-            <strong>MLB operations console</strong>
-            <p>Deterministic modeling, stats layers, live pricing, and matchup research in one accessible command surface.</p>
+            <span className="brand-kicker">SportsSenseAi MLB</span>
+            <strong>Premium intelligence platform for props, live markets, and matchup research</strong>
+            <p>Deterministic modeling, stats layers, live pricing, pregame context, and execution surfaces aligned in one branded operating system.</p>
           </div>
         </div>
 
@@ -77,9 +77,9 @@ function SiteHeader({ selectedDate, setSelectedDate, health }) {
 
         <div className="site-footprint">
           <span>Deterministic layer</span>
-          <span>Stats layer</span>
+          <span>Statcast previews</span>
           <span>Live market ops</span>
-          <span>Research rooms</span>
+          <span>Pitcher labs</span>
         </div>
       </div>
     </header>
@@ -122,13 +122,13 @@ export default function App() {
       {!isPropsExperience ? (
         <footer className="site-footer">
           <div className="site-footer-brand">
-            <img src="/favicon.svg" alt="SportsSense AI mark" />
+            <img src="/brand/growth-connectivity-icon.png" alt="SportsSense AI mark" />
             <div>
               <strong>SportsSense AI</strong>
-              <span>Accessible MLB research, pricing oversight, and live-sync operations.</span>
+              <span>Subscription-grade MLB research, pricing oversight, and live-sync operations.</span>
             </div>
           </div>
-          <span>Built to preserve the modeling stack while improving the daily operating surface.</span>
+          <span>Built to preserve the modeling stack while giving the product a sharper, premium front-end experience.</span>
         </footer>
       ) : null}
     </div>

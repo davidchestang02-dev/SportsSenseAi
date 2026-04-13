@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 
-import { getPlayerHeadshotUrl, playerInitials } from "../../media";
+import { getPlayerHeadshotCandidates, playerInitials } from "../../media";
 import { useGamePreview, usePitcherProfile, usePregameSlate, useWeather } from "../../researchData";
 import { buildMlbPropsGames, SPORTSBOOKS } from "./mockData";
 import styles from "./MLBPropsPage.module.css";
@@ -423,12 +423,22 @@ function rankingBadgeText(ranking) {
 }
 
 function PlayerAvatar({ player, size = "regular" }) {
-  const src = getPlayerHeadshotUrl(player);
+  const candidates = getPlayerHeadshotCandidates(player);
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const label = player?.playerName || player?.name || player?.fullName || "Player";
+  const src = candidates[candidateIndex] || "";
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [candidates.join("|")]);
 
   return (
     <div className={`${styles.avatar} ${size === "small" ? styles.avatarSmall : ""}`}>
-      {src ? <img src={src} alt={`${label} headshot`} /> : <span>{playerInitials(label)}</span>}
+      {src ? (
+        <img src={src} alt={`${label} headshot`} onError={() => setCandidateIndex((current) => current + 1)} />
+      ) : (
+        <span>{playerInitials(label)}</span>
+      )}
     </div>
   );
 }
@@ -454,10 +464,10 @@ export function FilterBar({
     <>
       <header className={styles.topbar}>
         <div className={styles.brandBlock}>
-          <img className={styles.brandMark} src="/favicon.svg" alt="SportsSenseAi mark" />
+          <img className={styles.brandMark} src="/brand/growth-connectivity-icon.png" alt="SportsSenseAi mark" />
           <div>
             <span className={styles.brandKicker}>SportsSenseAi</span>
-            <strong>MLB Player Props Command Surface</strong>
+            <strong>MLB Player Props</strong>
           </div>
         </div>
 

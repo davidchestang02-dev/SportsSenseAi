@@ -746,23 +746,23 @@ export function LandingPage({ data, selectedDate }) {
     <div className="page-shell page-shell--landing">
       <section className="landing-hero">
         <div className="landing-copy">
-          <span className="section-eyebrow">Accessible MLB operations surface</span>
-          <h1>SportsSense AI turns live slate monitoring, model review, and pricing control into one clear working screen.</h1>
+          <span className="section-eyebrow">SportsSenseAi MLB</span>
+          <h1>The operating system for MLB props, live markets, and matchup research.</h1>
           <p className="landing-lead">
-            The deterministic layer, stats layer, live game intake, and market review tools stay intact. What changes
-            here is the surface: higher trust, cleaner hierarchy, and faster movement between schedule, matchup,
-            player, market, and live contexts.
+            The deterministic layer and stats layer stay intact. What changes here is the product surface: stronger
+            hierarchy, faster navigation, richer game context, and a front end that feels credible enough for a paid
+            subscription business.
           </p>
 
           <div className="cta-row">
             <Link className="primary-button" to="/command-center">
-              Open command surface
+              Open board
             </Link>
-            <Link className="secondary-button" to="/games">
-              Review today's games
+            <Link className="secondary-button" to="/mlb">
+              Open props
             </Link>
-            <Link className="ghost-button" to="/markets">
-              Check market board
+            <Link className="ghost-button" to="/live">
+              Watch live
             </Link>
           </div>
 
@@ -787,6 +787,15 @@ export function LandingPage({ data, selectedDate }) {
         </div>
 
         <div className="landing-visual">
+          <article className="landing-brand-panel">
+            <img src="/brand/sportssense-circuit-logo.png" alt="SportsSenseAi brand" />
+            <div className="landing-brand-copy">
+              <span className="mini-label">SportsSenseAi identity</span>
+              <strong>One brand across the board, matchup, player, props, and live workflows.</strong>
+              <p>Built for a dark, high-trust, premium feel that supports a real subscription product instead of an internal mockup.</p>
+            </div>
+          </article>
+
           <article className="landing-summary-card">
             <span className="mini-label">Today's operating posture</span>
             <strong>{featuredScheduleGame ? scheduleMatchupLabel(featuredScheduleGame) : "Slate sync in progress"}</strong>

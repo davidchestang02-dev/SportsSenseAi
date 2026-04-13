@@ -1,28 +1,29 @@
-@import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
 
 :root {
-  color-scheme: light;
-  --ssa-blue-dark: #002244;
-  --ssa-blue-action: #004a99;
-  --ssa-blue-soft: #6c95c1;
-  --ssa-gray-light: #b6b6b6;
-  --ssa-gray-panel: #999999;
-  --ssa-gray-border: #999999;
-  --ssa-gray-strong: #6c7075;
-  --ssa-red: #d1242a;
-  --ssa-green: #1f6b43;
-  --ssa-gold: #fd9c24;
-  --white: #ffffff;
-  --text-main: #1b1b1b;
-  --text-muted: #4b5563;
-  --text-soft: #4475d8;
-  --shadow-sm: 0 8px 24px rgba(0, 34, 68, 0.08);
-  --shadow-md: 0 18px 40px rgba(5, 32, 59, 0.7);
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --content-max: 1280px;
+  color-scheme: dark;
+  --ssa-blue-dark: #0a0f1f;
+  --ssa-blue-action: #4da3ff;
+  --ssa-blue-soft: #1f3150;
+  --ssa-cyan: #00d4ff;
+  --ssa-gray-light: #1a2337;
+  --ssa-gray-panel: #121b2d;
+  --ssa-gray-border: rgba(111, 139, 185, 0.24);
+  --ssa-gray-strong: #70819b;
+  --ssa-red: #ff4d4d;
+  --ssa-green: #00c46c;
+  --ssa-gold: #ffc04d;
+  --white: #10182a;
+  --text-main: #e8ecf2;
+  --text-muted: #a7b0c0;
+  --text-soft: #78c4ff;
+  --shadow-sm: 0 18px 38px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 28px 60px rgba(0, 0, 0, 0.4);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --content-max: 1440px;
   --transition: 160ms ease;
 }
 
@@ -46,8 +47,10 @@ body {
   font-family: "Public Sans", "Segoe UI", sans-serif;
   line-height: 1.5;
   background:
-    radial-gradient(circle at top right, rgba(0, 74, 153, 0.12), transparent 26rem),
-    linear-gradient(180deg, #f9fbfd 0%, #eff3f7 56%, #e5ebf3 100%);
+    radial-gradient(circle at top left, rgba(77, 163, 255, 0.16), transparent 24rem),
+    radial-gradient(circle at top right, rgba(0, 212, 255, 0.12), transparent 20rem),
+    linear-gradient(180deg, #08101f 0%, #0a0f1f 36%, #060a14 100%);
+  background-attachment: fixed;
 }
 
 a {
@@ -61,6 +64,7 @@ a:hover {
 
 img {
   max-width: 100%;
+  display: block;
 }
 
 button,
@@ -77,10 +81,11 @@ textarea {
 }
 
 .recharts-tooltip-wrapper .recharts-default-tooltip {
-  background: var(--white) !important;
-  border: 1px solid var(--ssa-gray-border) !important;
-  border-radius: var(--radius-sm) !important;
+  background: rgba(10, 15, 31, 0.96) !important;
+  border: 1px solid rgba(77, 163, 255, 0.24) !important;
+  border-radius: 14px !important;
   box-shadow: var(--shadow-sm);
+  color: var(--text-main) !important;
 }
 
 @keyframes sectionRise {
