@@ -361,6 +361,55 @@
   padding: 0 1.25rem 1.2rem;
 }
 
+.gameContextBar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 0.9rem;
+}
+
+.contextCard {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.contextCard span,
+.contextCard small {
+  color: var(--muted);
+}
+
+.contextCard span {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.contextCard small {
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.rankingStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 0.95rem;
+}
+
+.rankingBadge {
+  border: 1px solid rgba(77, 163, 255, 0.16);
+  border-radius: 999px;
+  padding: 0.5rem 0.8rem;
+  background: rgba(77, 163, 255, 0.08);
+  color: #c9dcff;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
 .tableWrap {
   overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -814,6 +863,7 @@
 
   .filterGrid,
   .rightColumn,
+  .gameContextBar,
   .expandPanelInner,
   .pitchMixBlock {
     grid-template-columns: 1fr;

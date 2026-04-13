@@ -84,6 +84,21 @@ function weatherLabel(weather) {
   return `${weather.tempF ?? "--"}F | ${weather.windSpeed ?? "--"} mph ${windDirectionLabel(weather.windDir)}`;
 }
 
+function weatherDetailLabel(weather) {
+  if (!weather) {
+    return "Atmosphere pending";
+  }
+
+  const parts = [];
+  if (weather.conditions) {
+    parts.push(weather.conditions);
+  }
+  if (Number.isFinite(Number(weather.precipProb)) && Number(weather.precipProb) > 0) {
+    parts.push(`${Math.round(Number(weather.precipProb))}% precip`);
+  }
+  return parts.join(" | ") || "Atmosphere pending";
+}
+
 function normalizeName(value) {
   return String(value || "")
     .toLowerCase()
@@ -263,6 +278,32 @@ function booksSummary(selectedBooks) {
   return selectedBooks.map((book) => SPORTSBOOK_LABELS[book]).join(", ");
 }
 
+function venueLabel(game) {
+  const venue = game?.ballpark?.name;
+  const place = [game?.ballpark?.city, game?.ballpark?.state].filter(Boolean).join(", ");
+  if (venue && place) {
+    return `${venue} | ${place}`;
+  }
+  return venue || place || "Venue pending";
+}
+
+function roofLabel(game) {
+  return game?.ballpark?.roofType || "Roof pending";
+}
+
+function rankingInsights(game) {
+  return [
+    ...(game?.teamRankings?.away || []).map((ranking) => ({ ...ranking, team: game.awayTeam.abbr })),
+    ...(game?.teamRankings?.home || []).map((ranking) => ({ ...ranking, team: game.homeTeam.abbr }))
+  ]
+    .sort((left, right) => Number(left.rank || 999) - Number(right.rank || 999))
+    .slice(0, 4);
+}
+
+function rankingBadgeText(ranking) {
+  return `${ranking.team} ${String(ranking.category || "metric").replace(/_/g, " ")} #${ranking.rank} ${ranking.split || "season"}`;
+}
+
 function PlayerAvatar({ player, size = "regular" }) {
   const src = getPlayerHeadshotUrl(player);
   const label = player?.playerName || player?.name || player?.fullName || "Player";
@@ -341,7 +382,7 @@ export function FilterBar({
                       onChange={() => onToggleBook(book)}
                     />
                     <span>
-                      {SPORTSBOOK_LABELS[book]} · {book}
+                      {SPORTSBOOK_LABELS[book]} | {book}
                     </span>
                   </label>
                 ))}
@@ -587,6 +628,9 @@ export function GameSection({
   selectedPropKey,
   onSelectProp
 }) {
+  const rankingRows = rankingInsights(game);
+  const catalogCount = game?.marketCount || (game?.props?.length || 0) * Math.max(selectedBooks.length, 1);
+
   return (
     <section className={`${styles.gameSection} ${isOpen ? styles.gameSectionOpen : ""}`}>
       <button type="button" className={styles.gameSectionHeader} onClick={onToggle}>
@@ -606,7 +650,8 @@ export function GameSection({
         </div>
 
         <div className={styles.gameHeaderMeta}>
-          <span className={styles.weatherChip}>WX · {weatherLabel(game.weather)}</span>
+          <span className={styles.weatherChip}>WX | {weatherLabel(game.weather)}</span>
+          <span className={styles.weatherChip}>{roofLabel(game)}</span>
           <span className={styles.propsCount}>{game?.props?.length || 0} props</span>
           <span className={`${styles.collapseIcon} ${isOpen ? styles.collapseIconOpen : ""}`}>+</span>
         </div>
@@ -614,6 +659,34 @@ export function GameSection({
 
       <div className={`${styles.gameSectionBody} ${isOpen ? styles.gameSectionBodyOpen : ""}`}>
         <div className={styles.gameSectionInner}>
+          <div className={styles.gameContextBar}>
+            <article className={styles.contextCard}>
+              <span>Venue</span>
+              <strong>{venueLabel(game)}</strong>
+              <small>{roofLabel(game)}</small>
+            </article>
+            <article className={styles.contextCard}>
+              <span>Weather</span>
+              <strong>{weatherLabel(game.weather)}</strong>
+              <small>{weatherDetailLabel(game.weather)}</small>
+            </article>
+            <article className={styles.contextCard}>
+              <span>Readiness</span>
+              <strong>{game?.battingOrders?.away || 0}/{game?.battingOrders?.home || 0} hitters posted</strong>
+              <small>{catalogCount} market rows in source catalog</small>
+            </article>
+          </div>
+
+          {rankingRows.length > 0 ? (
+            <div className={styles.rankingStrip}>
+              {rankingRows.map((ranking) => (
+                <span key={`${ranking.team}-${ranking.category}-${ranking.split}`} className={styles.rankingBadge}>
+                  {rankingBadgeText(ranking)}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
           <PlayerPropTable
             game={game}
             props={game.props}
@@ -657,7 +730,7 @@ export function PlayerProfileCard({ selectedProp, previewHitter }) {
         <div>
           <h3>{selectedProp.playerName}</h3>
           <p>
-            {selectedProp.teamAbbr} · {selectedProp.handedness || "--"} handed
+            {selectedProp.teamAbbr} | {selectedProp.handedness || "--"} handed
           </p>
         </div>
       </div>
@@ -766,7 +839,7 @@ export function PitcherMatchupCard({ pitcherCard, loading }) {
         <div>
           <h3>{pitcherCard.name}</h3>
           <p>
-            {pitcherCard.teamAbbr} · Throws {pitcherCard.throws}
+            {pitcherCard.teamAbbr} | Throws {pitcherCard.throws}
           </p>
         </div>
       </div>
