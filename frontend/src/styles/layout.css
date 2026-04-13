@@ -5,6 +5,10 @@
   gap: 1rem;
 }
 
+.site-shell--immersive {
+  gap: 0;
+}
+
 .site-header,
 .site-main,
 .site-footer {
@@ -24,6 +28,12 @@
   display: grid;
   gap: 1rem;
   padding-bottom: 1.25rem;
+}
+
+.site-main--immersive {
+  width: 100%;
+  margin: 0;
+  padding-bottom: 0;
 }
 
 .site-header-row,

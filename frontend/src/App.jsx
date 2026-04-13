@@ -1,5 +1,5 @@
 import { Suspense, lazy, startTransition, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { todayIso } from "./api";
 import { useSlateBundle } from "./dashboardData";
@@ -11,7 +11,7 @@ const GamesPage = lazy(() => import("./pages").then((module) => ({ default: modu
 const PlayersPage = lazy(() => import("./pages").then((module) => ({ default: module.PlayersPage })));
 const PitchersPage = lazy(() => import("./pages").then((module) => ({ default: module.PitchersPage })));
 const WeatherPage = lazy(() => import("./pages").then((module) => ({ default: module.WeatherPage })));
-const MarketsPage = lazy(() => import("./pages").then((module) => ({ default: module.MarketsPage })));
+const MLBPropsPage = lazy(() => import("./features/mlb-props/MLBPropsPage"));
 const LivePage = lazy(() => import("./pages").then((module) => ({ default: module.LivePage })));
 const LineupsPage = lazy(() => import("./pages").then((module) => ({ default: module.LineupsPage })));
 
@@ -23,7 +23,7 @@ const navItems = [
   { to: "/players", label: "Players" },
   { to: "/pitchers", label: "Pitchers" },
   { to: "/weather", label: "Weather" },
-  { to: "/markets", label: "Markets" },
+  { to: "/mlb", label: "MLB Props" },
   { to: "/live", label: "Live Ops" },
   { to: "/lineups", label: "Lineups" }
 ];
@@ -89,13 +89,17 @@ function SiteHeader({ selectedDate, setSelectedDate, health }) {
 export default function App() {
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const data = useSlateBundle(selectedDate);
+  const location = useLocation();
+  const isPropsExperience = location.pathname === "/mlb" || location.pathname === "/markets";
 
   return (
-    <div className="site-shell">
-      <SiteHeader selectedDate={selectedDate} setSelectedDate={setSelectedDate} health={data.health} />
+    <div className={`site-shell${isPropsExperience ? " site-shell--immersive" : ""}`}>
+      {!isPropsExperience ? (
+        <SiteHeader selectedDate={selectedDate} setSelectedDate={setSelectedDate} health={data.health} />
+      ) : null}
 
-      <main className="site-main">
-        {data.error ? <div className="warning-banner">Data refresh warning: {data.error}</div> : null}
+      <main className={`site-main${isPropsExperience ? " site-main--immersive" : ""}`}>
+        {!isPropsExperience && data.error ? <div className="warning-banner">Data refresh warning: {data.error}</div> : null}
 
         <Suspense fallback={<div className="empty-state">Loading SportsSense AI experience...</div>}>
           <Routes>
@@ -106,7 +110,8 @@ export default function App() {
             <Route path="/players" element={<PlayersPage data={data} selectedDate={selectedDate} />} />
             <Route path="/pitchers" element={<PitchersPage selectedDate={selectedDate} />} />
             <Route path="/weather" element={<WeatherPage selectedDate={selectedDate} />} />
-            <Route path="/markets" element={<MarketsPage data={data} />} />
+            <Route path="/mlb" element={<MLBPropsPage data={data} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />} />
+            <Route path="/markets" element={<MLBPropsPage data={data} selectedDate={selectedDate} setSelectedDate={setSelectedDate} />} />
             <Route path="/live" element={<LivePage data={data} selectedDate={selectedDate} />} />
             <Route path="/lineups" element={<LineupsPage data={data} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -114,16 +119,18 @@ export default function App() {
         </Suspense>
       </main>
 
-      <footer className="site-footer">
-        <div className="site-footer-brand">
-          <img src="/favicon.svg" alt="SportsSense AI mark" />
-          <div>
-            <strong>SportsSense AI</strong>
-            <span>Accessible MLB research, pricing oversight, and live-sync operations.</span>
+      {!isPropsExperience ? (
+        <footer className="site-footer">
+          <div className="site-footer-brand">
+            <img src="/favicon.svg" alt="SportsSense AI mark" />
+            <div>
+              <strong>SportsSense AI</strong>
+              <span>Accessible MLB research, pricing oversight, and live-sync operations.</span>
+            </div>
           </div>
-        </div>
-        <span>Built to preserve the modeling stack while improving the daily operating surface.</span>
-      </footer>
+          <span>Built to preserve the modeling stack while improving the daily operating surface.</span>
+        </footer>
+      ) : null}
     </div>
   );
 }
