@@ -7,6 +7,7 @@ import { handleAutoBetRequest } from "../../mlb-autobet/src/index";
 import { handleGameContextRequest, MLB_LIVE_SYNC_PROFILE, syncMlbLiveGames } from "../../mlb-game-context/src/index";
 import { handleLineupsRequest } from "../../mlb-lineups/src/index";
 import { handleMarketMakerRequest } from "../../mlb-market-maker/src/index";
+import { handlePlayerPropsRequest, syncMlbPlayerProps } from "../../mlb-player-props/src/index";
 import { handlePitchersRequest } from "../../mlb-pitchers/src/index";
 import { handlePregameRequest, syncPregameSlate } from "../../mlb-pregame/src/index";
 import { handleResearchRequest } from "../../mlb-research/src/index";
@@ -299,6 +300,7 @@ async function runScheduledMlbOps(env: Env, scheduledTime: number) {
 
   if (hour === 11 && minute === 0) {
     await syncPregameSlate(env, todayEt);
+    await syncMlbPlayerProps(env, todayEt).catch(() => null);
   }
 
   if (hour === 3 && minute === 0) {
@@ -326,6 +328,7 @@ export default {
             routes: {
               schedule: "/schedule/mlb",
               pregame: "/pregame/mlb",
+              props: "/props/mlb",
               weather: "/weather/mlb",
               pitchers: "/pitchers/mlb",
               gamecast: "/games/mlb/:gameId/gamecast"
@@ -361,6 +364,7 @@ export default {
       if (path.startsWith("/pregame/mlb") || path.startsWith("/weather/mlb") || path.startsWith("/admin/mlb/pregame-sync") || path.startsWith("/admin/mlb/statcast-sync")) {
         return handlePregameRequest(request, env);
       }
+      if (path.startsWith("/props/mlb") || path.startsWith("/admin/mlb/props-sync")) return handlePlayerPropsRequest(request, env);
       if (path.startsWith("/games/mlb/") && path.endsWith("/preview")) return handlePregameRequest(request, env);
       if (path.startsWith("/pitchers/mlb") || path.startsWith("/admin/mlb/pitchers/sync")) return handlePitchersRequest(request, env);
       if (path.startsWith("/research/mlb")) return handleResearchRequest(request, env);

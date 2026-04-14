@@ -305,6 +305,44 @@ export interface UnifiedGameOddsBook {
   payload?: Record<string, unknown>;
 }
 
+export interface NormalizedPlayerPropBook {
+  line: number | null;
+  over: number | null;
+  under: number | null;
+}
+
+export interface NormalizedPlayerPropModel {
+  mean: number | null;
+  overProb: number | null;
+  underProb: number | null;
+  edge: number | null;
+}
+
+export interface NormalizedPlayerProp {
+  date: string;
+  gameId: string | null;
+  sourceGameId: string | null;
+  uniquePropId: string;
+  playerId: number | null;
+  playerName: string;
+  teamAbbr: string;
+  opponentAbbr: string | null;
+  homeTeamAbbr: string | null;
+  awayTeamAbbr: string | null;
+  homeAway: "HOME" | "AWAY" | null;
+  propKey: string;
+  propType: string;
+  propLabel: string;
+  line: number | null;
+  handedness: string | null;
+  teamLogo: string | null;
+  playerLink: string | null;
+  sportsbooks: Record<string, NormalizedPlayerPropBook>;
+  sourceBooks: string[];
+  model: NormalizedPlayerPropModel | null;
+  payload?: Record<string, unknown>;
+}
+
 export interface NormalizedGamecastPlay {
   id: string;
   sequence: number;

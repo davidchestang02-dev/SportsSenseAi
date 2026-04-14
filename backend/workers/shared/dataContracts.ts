@@ -144,6 +144,14 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
     notes: "Market board is D1-backed and otherwise returns an empty market set."
   },
   {
+    path: "/props/mlb",
+    worker: "mlb-player-props",
+    source_mode: "external_plus_db",
+    verification_status: "partial",
+    tables: ["mlb_player_props", "mlb_player_props_history", "mlb_projections"],
+    notes: "Player props are fetched from RotoWire, flattened into SQL-ready rows in D1, and enriched with deterministic model outputs when matching projection rows exist."
+  },
+  {
     path: "/risk/mlb",
     worker: "mlb-risk-engine",
     source_mode: "db_only",
@@ -286,6 +294,8 @@ export const DATA_HEALTH_TABLES = [
   "mlb_game_odds_books_history",
   "mlb_gamecast_state",
   "mlb_gamecast_plays",
+  "mlb_player_props",
+  "mlb_player_props_history",
   "mlb_weather",
   "mlb_umpires",
   "mlb_parks",

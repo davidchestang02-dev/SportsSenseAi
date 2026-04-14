@@ -76,6 +76,10 @@ export function getMarkets(date) {
   return readJson(`/api/market/mlb?date=${date}`);
 }
 
+export function getPlayerProps(date, options = {}) {
+  return readJson(`/api/props/mlb${buildQuery({ date, ...options })}`);
+}
+
 export function getRisk(date) {
   return readJson(`/api/risk/mlb?date=${date}`);
 }

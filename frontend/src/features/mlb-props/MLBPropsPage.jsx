@@ -2,18 +2,10 @@ import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 
 
 import { getPlayerHeadshotCandidates, playerInitials } from "../../media";
 import { useGamePreview, usePitcherProfile, usePregameSlate, useWeather } from "../../researchData";
-import { buildMlbPropsGames, SPORTSBOOKS } from "./propsDataAdapter";
+import { buildMlbPropsGames, SPORTSBOOK_LABELS } from "./propsDataAdapter";
 import styles from "./MLBPropsPage.module.css";
 
 const LEAGUE_TABS = ["MLB", "NBA", "NHL", "NFL"];
-const PROP_TYPES = ["ALL", "HR", "HITS", "TB", "K"];
-const SPORTSBOOK_LABELS = {
-  draftkings: "DK",
-  fanduel: "FD",
-  betmgm: "MGM",
-  prizepicks: "PP",
-  underdog: "UD"
-};
 const PITCH_MIX_COLORS = ["#4DA3FF", "#00D4FF", "#FFC04D", "#FF4D4D", "#7C9BFF", "#4EF0A8"];
 
 function round(value, digits = 1) {
@@ -35,12 +27,23 @@ function formatStartTime(value) {
 }
 
 function formatProbability(probability) {
-  return `${Math.round((Number(probability) || 0) * 100)}%`;
+  const value = Number(probability);
+  return Number.isFinite(value) ? `${Math.round(value * 100)}%` : "--";
 }
 
 function formatEdge(value) {
-  const edge = Number(value || 0);
-  return `${edge >= 0 ? "+" : ""}${edge.toFixed(2)}`;
+  const edge = Number(value);
+  return Number.isFinite(edge) ? `${edge >= 0 ? "+" : ""}${edge.toFixed(2)}` : "--";
+}
+
+function formatProjectionMean(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "--";
+}
+
+function formatLine(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${Math.round(number * 100) / 100}` : "--";
 }
 
 function formatMetric(value, digits = 3) {
@@ -112,7 +115,10 @@ function findPreviewHitter(preview, playerName) {
 }
 
 function getProbabilityClass(probability) {
-  const value = Number(probability || 0);
+  const value = Number(probability);
+  if (!Number.isFinite(value)) {
+    return styles.edgeNeutral;
+  }
   if (value > 0.6) {
     return styles.probGood;
   }
@@ -176,12 +182,16 @@ function bookCellText(book, prop) {
     return "--";
   }
 
-  if (typeof market.line === "number") {
-    return String(market.line);
-  }
-
+  const line = typeof market.line === "number" ? market.line : null;
   const over = typeof market.over === "number" ? `${market.over > 0 ? "+" : ""}${market.over}` : "--";
   const under = typeof market.under === "number" ? `${market.under > 0 ? "+" : ""}${market.under}` : "--";
+
+  if (line !== null && (market.over !== null || market.under !== null)) {
+    return `${line} | ${over}/${under}`;
+  }
+  if (line !== null) {
+    return String(line);
+  }
   return `${over} / ${under}`;
 }
 
@@ -274,12 +284,20 @@ function buildFilteredGames(games, filters) {
     });
 }
 
-function booksSummary(selectedBooks) {
-  if (selectedBooks.length === SPORTSBOOKS.length) {
+function booksSummary(selectedBooks, availableBooks) {
+  if (availableBooks.length === 0) {
+    return "No books available";
+  }
+
+  if (availableBooks.length > 0 && selectedBooks.length === availableBooks.length) {
     return "All books";
   }
 
-  return selectedBooks.map((book) => SPORTSBOOK_LABELS[book]).join(", ");
+  if (selectedBooks.length === 0) {
+    return "No books selected";
+  }
+
+  return selectedBooks.map((book) => SPORTSBOOK_LABELS[book] || book.toUpperCase()).join(", ");
 }
 
 function formatAmerican(value) {
@@ -365,7 +383,7 @@ function ladderLinesForProp(prop) {
 }
 
 function buildModelLadder(prop) {
-  if (!prop) {
+  if (!prop || !Number.isFinite(Number(prop?.model?.mean))) {
     return [];
   }
 
@@ -385,19 +403,25 @@ function buildPlayerMarketCatalog(game, prop) {
     return [];
   }
 
-  return (game.marketRows || [])
-    .filter((market) => String(market?.player_id || "") === String(prop.playerId))
-    .sort((left, right) => Number(right.edge || 0) - Number(left.edge || 0))
-    .slice(0, 10)
-    .map((market) => ({
-      key: `${market.player_id}-${market.prop_type}-${market.best_book}`,
-      label: formatPropLabel(market.prop_type),
-      posted: formatAmerican(market.posted_american),
-      fair: formatAmerican(market.fair_american),
-      book: market.best_book || "--",
-      edge: Number(market.edge || 0),
-      confidence: Number(market.confidence || 0)
-    }));
+  return Object.entries(prop?.sportsbooks || {})
+    .map(([book, market]) => ({
+      key: `${prop.playerId}-${prop.propType}-${book}`,
+      label: formatPropLabel(prop.propType),
+      book,
+      line: market?.line ?? null,
+      over: market?.over ?? null,
+      under: market?.under ?? null,
+      edge: Number(prop?.model?.edge || 0)
+    }))
+    .sort((left, right) => String(left.book).localeCompare(String(right.book)));
+}
+
+function bookDisplayName(book) {
+  return SPORTSBOOK_LABELS[book] || String(book || "").toUpperCase();
+}
+
+function buildPropTypeOptions(games) {
+  return ["ALL", ...Array.from(new Set(games.flatMap((game) => (game.props || []).map((prop) => prop.propType)))).sort()];
 }
 
 function venueLabel(game) {
@@ -455,6 +479,8 @@ export function FilterBar({
   selectedDate,
   onDateChange,
   teamOptions,
+  propTypeOptions,
+  availableBooks,
   filters,
   onFilterChange,
   selectedBooks,
@@ -502,11 +528,11 @@ export function FilterBar({
 
           <div className={styles.bookSelectWrap}>
             <button type="button" className={styles.bookSelectButton} onClick={onToggleBooksOpen}>
-              {booksSummary(selectedBooks)}
+              {booksSummary(selectedBooks, availableBooks)}
             </button>
             {booksOpen ? (
               <div className={styles.bookMenu}>
-                {SPORTSBOOKS.map((book) => (
+                {availableBooks.map((book) => (
                   <label key={book} className={styles.bookMenuOption}>
                     <input
                       type="checkbox"
@@ -514,7 +540,7 @@ export function FilterBar({
                       onChange={() => onToggleBook(book)}
                     />
                     <span>
-                      {SPORTSBOOK_LABELS[book]} | {book}
+                      {bookDisplayName(book)} | {book}
                     </span>
                   </label>
                 ))}
@@ -570,7 +596,7 @@ export function FilterBar({
           <label className={styles.fieldStack}>
             <span>Prop type</span>
             <select value={filters.propType} onChange={(event) => onFilterChange("propType", event.target.value)}>
-              {PROP_TYPES.map((type) => (
+              {propTypeOptions.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>
@@ -581,7 +607,7 @@ export function FilterBar({
           <div className={styles.fieldStack}>
             <span>Sportsbooks</span>
             <button type="button" className={styles.inlineBookButton} onClick={onToggleBooksOpen}>
-              {booksSummary(selectedBooks)}
+              {booksSummary(selectedBooks, availableBooks)}
             </button>
           </div>
 
@@ -599,7 +625,7 @@ export function SportsbookOddsGrid({ prop, selectedBooks }) {
     <div className={styles.sportsbookGrid}>
       {selectedBooks.map((book) => (
         <article key={book} className={styles.sportsbookCell}>
-          <span>{SPORTSBOOK_LABELS[book]}</span>
+          <span>{bookDisplayName(book)}</span>
           <strong>{bookCellText(book, prop)}</strong>
         </article>
       ))}
@@ -672,7 +698,7 @@ export function PlayerPropRow({ prop, game, index, isSelected, onSelect, selecte
           </div>
         </td>
         <td className={styles.numericCell}>
-          <strong>{Number(prop?.model?.mean || 0).toFixed(2)}</strong>
+          <strong>{formatProjectionMean(prop?.model?.mean)}</strong>
         </td>
         {selectedBooks.map((book) => (
           <td key={book} className={styles.numericCell}>
@@ -702,10 +728,16 @@ export function PlayerPropRow({ prop, game, index, isSelected, onSelect, selecte
                     {game.awayTeam.abbr} @ {game.homeTeam.abbr}
                   </span>
                 </div>
-                <p>
-                  SportsSenseAi projects <strong>{Number(prop?.model?.mean || 0).toFixed(2)}</strong> against a market line of{" "}
-                  <strong>{prop.line}</strong>, with {formatProbability(prop?.model?.overProb)} over probability.
-                </p>
+                {prop?.model ? (
+                  <p>
+                    SportsSenseAi projects <strong>{formatProjectionMean(prop?.model?.mean)}</strong> against a market line of{" "}
+                    <strong>{formatLine(prop.line)}</strong>, with {formatProbability(prop?.model?.overProb)} over probability.
+                  </p>
+                ) : (
+                  <p>
+                    Market line is <strong>{formatLine(prop.line)}</strong>. SportsSenseAi model enrichment has not been published for this player prop yet.
+                  </p>
+                )}
                 <SportsbookOddsGrid prop={prop} selectedBooks={selectedBooks} />
               </div>
             </div>
@@ -725,7 +757,7 @@ export function PlayerPropTable({ game, props, selectedBooks, selectedPropKey, o
             <th>Player</th>
             <th>Projection</th>
             {selectedBooks.map((book) => (
-              <th key={book}>{SPORTSBOOK_LABELS[book]}</th>
+              <th key={book}>{bookDisplayName(book)}</th>
             ))}
             <th>O/U probs</th>
             <th>Edge</th>
@@ -857,6 +889,8 @@ export function PlayerProfileCard({ selectedProp, previewHitter }) {
 
   const statcast = playerCardStatcast(selectedProp, previewHitter);
   const sparkline = sparklinePath(selectedProp.recentForm || []);
+  const hasModel = Boolean(selectedProp?.model);
+  const hasRecentForm = Array.isArray(selectedProp?.recentForm) && selectedProp.recentForm.length > 0;
 
   return (
     <section className={styles.sidebarCard}>
@@ -911,23 +945,33 @@ export function PlayerProfileCard({ selectedProp, previewHitter }) {
           <strong>Last 10 games</strong>
           <span>{selectedProp.propType} form</span>
         </div>
-        <svg viewBox="0 0 280 56" className={styles.sparkline} role="img" aria-label="Recent form sparkline">
-          <path d={sparkline} />
-        </svg>
-        <div className={styles.sparklineLabels}>
-          {(selectedProp.recentForm || []).slice(-5).map((value, index) => (
-            <span key={`${value}-${index}`}>{Number(value || 0).toFixed(1)}</span>
-          ))}
-        </div>
+        {hasRecentForm ? (
+          <>
+            <svg viewBox="0 0 280 56" className={styles.sparkline} role="img" aria-label="Recent form sparkline">
+              <path d={sparkline} />
+            </svg>
+            <div className={styles.sparklineLabels}>
+              {(selectedProp.recentForm || []).slice(-5).map((value, index) => (
+                <span key={`${value}-${index}`}>{Number(value || 0).toFixed(1)}</span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className={styles.sidebarEmpty}>Last-10 player form has not been hydrated for this prop yet.</p>
+        )}
       </div>
 
       <div className={styles.projectionSummary}>
         <strong>SportsSenseAi projection summary</strong>
-        <p>
-          Mean <strong>{Number(selectedProp?.model?.mean || 0).toFixed(2)}</strong> against line <strong>{selectedProp.line}</strong> with{" "}
-          <span className={getProbabilityClass(selectedProp?.model?.overProb)}>{formatProbability(selectedProp?.model?.overProb)} over</span> and edge{" "}
-          <span className={getEdgeClass(selectedProp?.model?.edge)}>{formatEdge(selectedProp?.model?.edge)}</span>.
-        </p>
+        {hasModel ? (
+          <p>
+            Mean <strong>{formatProjectionMean(selectedProp?.model?.mean)}</strong> against line <strong>{formatLine(selectedProp.line)}</strong> with{" "}
+            <span className={getProbabilityClass(selectedProp?.model?.overProb)}>{formatProbability(selectedProp?.model?.overProb)} over</span> and edge{" "}
+            <span className={getEdgeClass(selectedProp?.model?.edge)}>{formatEdge(selectedProp?.model?.edge)}</span>.
+          </p>
+        ) : (
+          <p>Market data is live for this player, but the SportsSenseAi model output is still pending for this prop type.</p>
+        )}
       </div>
     </section>
   );
@@ -964,20 +1008,22 @@ export function PlayerMarketCatalogCard({ game, selectedProp }) {
           <span>Current app market feed</span>
         </div>
         {catalogRows.length > 0 ? (
-        <div className={styles.catalogTable}>
-          <div className={styles.catalogHeader}>
-            <span>Prop</span>
-            <span>Posted</span>
-            <span>Fair</span>
-            <span>Book</span>
-            <span>Edge</span>
+          <div className={styles.catalogTable}>
+            <div className={styles.catalogHeader}>
+              <span>Prop</span>
+              <span>Line</span>
+              <span>Over</span>
+              <span>Under</span>
+              <span>Book</span>
+              <span>Edge</span>
             </div>
             {catalogRows.map((row) => (
               <div key={row.key} className={styles.catalogRow}>
                 <strong>{row.label}</strong>
-                <span>{row.posted}</span>
-                <span>{row.fair}</span>
-                <span>{row.book}</span>
+                <span>{formatLine(row.line)}</span>
+                <span>{formatAmerican(row.over)}</span>
+                <span>{formatAmerican(row.under)}</span>
+                <span>{bookDisplayName(row.book)}</span>
                 <span className={getEdgeClass(row.edge)}>{formatEdge(row.edge)}</span>
               </div>
             ))}
@@ -1134,7 +1180,7 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
   const weather = useWeather(selectedDate);
   const [filters, setFilters] = useState({ team: "ALL", player: "", propType: "ALL" });
   const [booksOpen, setBooksOpen] = useState(false);
-  const [selectedBooks, setSelectedBooks] = useState(SPORTSBOOKS);
+  const [selectedBooks, setSelectedBooks] = useState([]);
   const [collapsedGames, setCollapsedGames] = useState({});
   const deferredPlayerSearch = useDeferredValue(filters.player.trim().toLowerCase());
 
@@ -1147,6 +1193,13 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
       }),
     [data, pregame.data, weather.data]
   );
+
+  const availableBooks = useMemo(
+    () => Array.from(new Set(propsGames.flatMap((game) => game.sourceBooks || []))).sort(),
+    [propsGames]
+  );
+
+  const propTypeOptions = useMemo(() => buildPropTypeOptions(propsGames), [propsGames]);
 
   const filteredGames = useMemo(
     () =>
@@ -1169,6 +1222,16 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
       label: value === "ALL" ? "All teams" : value
     }));
   }, [propsGames]);
+
+  useEffect(() => {
+    setSelectedBooks((current) => {
+      const preserved = current.filter((book) => availableBooks.includes(book));
+      if (preserved.length > 0) {
+        return preserved;
+      }
+      return [...availableBooks];
+    });
+  }, [availableBooks]);
 
   const playerOptions = useMemo(() => {
     const seen = new Set();
@@ -1243,7 +1306,7 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
 
   function handleResetFilters() {
     setFilters({ team: "ALL", player: "", propType: "ALL" });
-    setSelectedBooks(SPORTSBOOKS);
+    setSelectedBooks([...availableBooks]);
   }
 
   function handleToggleBook(book) {
@@ -1269,7 +1332,7 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
   }
 
   const loading = data?.loading || pregame.loading || weather.loading;
-  const hasAnyProps = filteredGames.some((game) => (game.props || []).length > 0);
+  const hasAnyProps = propsGames.some((game) => (game.props || []).length > 0);
 
   return (
     <div className={styles.propsPage}>
@@ -1277,11 +1340,13 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
         teamOptions={teamOptions}
+        propTypeOptions={propTypeOptions}
+        availableBooks={availableBooks}
         filters={filters}
         onFilterChange={handleFilterChange}
         selectedBooks={selectedBooks}
         onToggleBook={handleToggleBook}
-        onResetBooks={() => setSelectedBooks(SPORTSBOOKS)}
+        onResetBooks={() => setSelectedBooks([...availableBooks])}
         onResetFilters={handleResetFilters}
         booksOpen={booksOpen}
         onToggleBooksOpen={() => setBooksOpen((current) => !current)}

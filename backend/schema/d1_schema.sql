@@ -525,6 +525,80 @@ CREATE TABLE IF NOT EXISTS mlb_gamecast_plays (
 CREATE INDEX IF NOT EXISTS idx_mlb_gamecast_state_date ON mlb_gamecast_state(date);
 CREATE INDEX IF NOT EXISTS idx_mlb_gamecast_plays_game ON mlb_gamecast_plays(game_id, sequence);
 
+CREATE TABLE IF NOT EXISTS mlb_player_props (
+  date TEXT NOT NULL,
+  unique_prop_id TEXT NOT NULL,
+  game_id TEXT,
+  source_game_id TEXT,
+  player_id INTEGER,
+  player_name TEXT NOT NULL,
+  first_name TEXT,
+  last_name TEXT,
+  team_abbr TEXT NOT NULL,
+  opponent_abbr TEXT,
+  home_team_abbr TEXT,
+  away_team_abbr TEXT,
+  home_away TEXT,
+  prop_key TEXT NOT NULL,
+  prop_type TEXT NOT NULL,
+  prop_label TEXT NOT NULL,
+  consensus_line REAL,
+  handedness TEXT,
+  source_books TEXT,
+  team_logo TEXT,
+  player_link TEXT,
+  draftkings_line REAL,
+  draftkings_over INTEGER,
+  draftkings_under INTEGER,
+  fanduel_line REAL,
+  fanduel_over INTEGER,
+  fanduel_under INTEGER,
+  mgm_line REAL,
+  mgm_over INTEGER,
+  mgm_under INTEGER,
+  caesars_line REAL,
+  caesars_over INTEGER,
+  caesars_under INTEGER,
+  betrivers_line REAL,
+  betrivers_over INTEGER,
+  betrivers_under INTEGER,
+  fanatics_line REAL,
+  fanatics_over INTEGER,
+  fanatics_under INTEGER,
+  hardrock_line REAL,
+  hardrock_over INTEGER,
+  hardrock_under INTEGER,
+  thescore_line REAL,
+  thescore_over INTEGER,
+  thescore_under INTEGER,
+  circasports_line REAL,
+  circasports_over INTEGER,
+  circasports_under INTEGER,
+  sportsbooks_json TEXT NOT NULL,
+  raw_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (date, unique_prop_id)
+);
+
+CREATE TABLE IF NOT EXISTS mlb_player_props_history (
+  timestamp TEXT NOT NULL,
+  date TEXT NOT NULL,
+  unique_prop_id TEXT NOT NULL,
+  game_id TEXT,
+  source_game_id TEXT,
+  player_id INTEGER,
+  player_name TEXT NOT NULL,
+  team_abbr TEXT NOT NULL,
+  prop_type TEXT NOT NULL,
+  consensus_line REAL,
+  sportsbooks_json TEXT NOT NULL,
+  raw_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mlb_player_props_date_game ON mlb_player_props(date, game_id);
+CREATE INDEX IF NOT EXISTS idx_mlb_player_props_date_team ON mlb_player_props(date, team_abbr);
+CREATE INDEX IF NOT EXISTS idx_mlb_player_props_history_game ON mlb_player_props_history(game_id, timestamp);
+
 CREATE TABLE IF NOT EXISTS mlb_game_context (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date TEXT,

@@ -1,4 +1,14 @@
-export const SPORTSBOOKS = ["draftkings", "fanduel", "betmgm", "prizepicks", "underdog"];
+export const SPORTSBOOK_LABELS = {
+  draftkings: "DK",
+  fanduel: "FD",
+  mgm: "MGM",
+  caesars: "CZR",
+  betrivers: "BR",
+  fanatics: "FN",
+  hardrock: "HR",
+  thescore: "SCORE",
+  circasports: "CIRCA"
+};
 
 function countBattingOrderPlayers(value) {
   if (!value) {
@@ -54,25 +64,85 @@ function toNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function normalizeTeamAbbr(value) {
+  const normalized = String(value || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+  const aliases = {
+    AZ: "ARI",
+    ARZ: "ARI",
+    CWS: "CHW",
+    KCR: "KC",
+    SDP: "SD",
+    SFG: "SF",
+    TBR: "TB",
+    WAS: "WSH",
+    WSN: "WSH"
+  };
+  return aliases[normalized] || normalized;
+}
+
+function gameMatchupKey(game) {
+  return `${normalizeTeamAbbr(game.awayTeam?.abbr)}@${normalizeTeamAbbr(game.homeTeam?.abbr)}`;
+}
+
+function propMatchupKey(prop) {
+  return `${normalizeTeamAbbr(prop.awayTeamAbbr || prop.opponentAbbr)}@${normalizeTeamAbbr(prop.homeTeamAbbr || prop.teamAbbr)}`;
+}
+
+function groupPropsByMatchup(playerProps) {
+  return (playerProps || []).reduce((accumulator, prop) => {
+    const key =
+      prop.gameId && String(prop.gameId).trim()
+        ? `game:${prop.gameId}`
+        : `matchup:${propMatchupKey(prop)}`;
+    const existing = accumulator.get(key) || [];
+    existing.push(prop);
+    accumulator.set(key, existing);
+    return accumulator;
+  }, new Map());
+}
+
+function buildCatalogRows(props) {
+  return (props || []).flatMap((prop) =>
+    Object.entries(prop?.sportsbooks || {}).map(([book, market]) => ({
+      playerId: prop.playerId,
+      playerName: prop.playerName,
+      teamAbbr: prop.teamAbbr,
+      propType: prop.propType,
+      propLabel: prop.propLabel,
+      best_book: book,
+      line: market?.line ?? null,
+      over: market?.over ?? null,
+      under: market?.under ?? null,
+      edge: Number(prop?.model?.edge || 0),
+      over_probability: prop?.model?.overProb ?? null,
+      under_probability: prop?.model?.underProb ?? null
+    }))
+  );
+}
+
+function availableBooks(props) {
+  return Array.from(new Set((props || []).flatMap((prop) => prop?.sourceBooks || []))).sort();
+}
+
 export function buildMlbPropsGames({ bundle, pregameSlate, weatherBoard }) {
   const pregameGames = pregameSlate?.games || [];
   const scheduleGames = bundle?.schedule?.games || [];
   const weatherGames = weatherBoard?.games || [];
-  const markets = bundle?.markets || [];
+  const playerProps = bundle?.playerProps?.props || [];
 
   if (pregameGames.length === 0 && scheduleGames.length === 0) {
     return [];
   }
 
   const sourceGames = pregameGames.length > 0 ? pregameGames : scheduleGames;
+  const propsByMatchup = groupPropsByMatchup(playerProps);
 
   return sourceGames.map((game, index) => {
     const weather = weatherGames.find((entry) => String(entry.gameId) === String(game.gameId || game.gamePk)) || null;
     const sourceWeather = pickWeatherSnapshot(game.weatherData, game.gameDate || game.startTime || game.date);
     const weatherHour = weather?.hourly?.[0] || null;
-    const marketRows = markets.filter((market) => String(market?.game_id || "") === String(game.gameId || game.gamePk || ""));
 
-    return {
+    const normalizedGame = {
       gamePk: Number(game.gamePk || game.gameId || 900000 + index),
       gameId: String(game.gameId || game.gamePk || 900000 + index),
       startTime: game.startTime || game.gameDate || game.date || null,
@@ -85,21 +155,31 @@ export function buildMlbPropsGames({ bundle, pregameSlate, weatherBoard }) {
         id: Number(game.teams?.home?.id || game.homeTeam?.id || 0) || 2000 + index,
         abbr: game.teams?.home?.abbreviation || game.homeTeam?.abbr || game.homeTeam?.code || "HME",
         name: game.teams?.home?.name || game.homeTeam?.name || game.homeTeam?.fullName || "Home Team"
-      },
+      }
+    };
+
+    const props =
+      propsByMatchup.get(`game:${normalizedGame.gameId}`) ||
+      propsByMatchup.get(`matchup:${gameMatchupKey(normalizedGame)}`) ||
+      [];
+    const marketRows = buildCatalogRows(props);
+
+    return {
+      ...normalizedGame,
       probablePitchers: {
         away: {
           id: Number(game.probablePitchers?.away?.id || game.visitorPitcherId || 0) || null,
           name:
             game.probablePitchers?.away?.name ||
             game.probablePitchers?.away?.fullName ||
-            `${game.teams?.away?.abbreviation || game.awayTeam?.abbr || game.visitorTeam?.code || "Away"} Starter`
+            `${normalizedGame.awayTeam.abbr} Starter`
         },
         home: {
           id: Number(game.probablePitchers?.home?.id || game.homePitcherId || 0) || null,
           name:
             game.probablePitchers?.home?.name ||
             game.probablePitchers?.home?.fullName ||
-            `${game.teams?.home?.abbreviation || game.homeTeam?.abbr || game.homeTeam?.code || "Home"} Starter`
+            `${normalizedGame.homeTeam.abbr} Starter`
         }
       },
       weather: {
@@ -127,9 +207,9 @@ export function buildMlbPropsGames({ bundle, pregameSlate, weatherBoard }) {
       },
       marketRows,
       marketCount: marketRows.length,
-      sourceBooks: Array.from(new Set(marketRows.map((market) => market.best_book).filter(Boolean))),
+      sourceBooks: availableBooks(props),
       sourceShape: game?.visitorTeam ? "propfinder_like" : "ssa",
-      props: []
+      props
     };
   });
 }

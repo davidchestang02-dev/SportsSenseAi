@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getAutoBet, getCalibration, getDataHealth, getGameContexts, getHealth, getLineups, getLive, getMarkets, getRisk, getSchedule, getSimulation, todayIso } from "./api";
+import { getAutoBet, getCalibration, getDataHealth, getGameContexts, getHealth, getLineups, getLive, getMarkets, getPlayerProps, getRisk, getSchedule, getSimulation, todayIso } from "./api";
 
 const fallbackHealth = {
   ok: false,
@@ -17,6 +17,7 @@ const initialState = {
   schedule: { date: todayIso(), games: [], ingestion: { odds_snapshots_attempted: 0, odds_snapshots_persisted: 0 } },
   simulation: { players: [], teams: [], games: [], slate: { top_batters: [], top_pitchers: [] } },
   markets: [],
+  playerProps: { date: todayIso(), props: [], books: [], propTypes: [], ingestion: null },
   risk: { recommendations: [] },
   lineups: { lineups: [], injuries: [] },
   contexts: [],
@@ -109,6 +110,7 @@ export function useSlateBundle(selectedDate) {
         getSchedule(selectedDate),
         getSimulation(selectedDate),
         getMarkets(selectedDate),
+        getPlayerProps(selectedDate),
         getRisk(selectedDate),
         getLineups(selectedDate),
         getGameContexts(selectedDate),
@@ -123,7 +125,7 @@ export function useSlateBundle(selectedDate) {
       const errorMessage = results
         .map((result, index) => ({ result, index }))
         .filter(({ result }) => result.status === "rejected")
-        .map(({ index }) => ["health", "dataHealth", "schedule", "simulation", "markets", "risk", "lineups", "contexts", "autobet", "calibration"][index])
+        .map(({ index }) => ["health", "dataHealth", "schedule", "simulation", "markets", "playerProps", "risk", "lineups", "contexts", "autobet", "calibration"][index])
         .join(", ");
 
       const nextState = {
@@ -134,11 +136,12 @@ export function useSlateBundle(selectedDate) {
         schedule: settledValue(results[2], initialState.schedule),
         simulation: settledValue(results[3], initialState.simulation),
         markets: settledValue(results[4], initialState.markets),
-        risk: settledValue(results[5], initialState.risk),
-        lineups: settledValue(results[6], initialState.lineups),
-        contexts: settledValue(results[7], initialState.contexts),
-        autobet: settledValue(results[8], initialState.autobet),
-        calibration: settledValue(results[9], initialState.calibration),
+        playerProps: settledValue(results[5], initialState.playerProps),
+        risk: settledValue(results[6], initialState.risk),
+        lineups: settledValue(results[7], initialState.lineups),
+        contexts: settledValue(results[8], initialState.contexts),
+        autobet: settledValue(results[9], initialState.autobet),
+        calibration: settledValue(results[10], initialState.calibration),
         live: null
       };
 
