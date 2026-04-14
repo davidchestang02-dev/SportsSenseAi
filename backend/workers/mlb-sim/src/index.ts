@@ -1,5 +1,4 @@
 import { queryAll } from "../../shared/db";
-import { getMockGameContexts, getMockSlate } from "../../shared/mockData";
 import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { Env, ProjectionRow } from "../../shared/types";
 import { methodNotAllowed, parseDate, round, withError } from "../../shared/utils";
@@ -40,23 +39,18 @@ export async function handleSimRequest(request: Request, env: Env): Promise<Resp
   try {
     const url = new URL(request.url);
     const date = parseDate(url.searchParams.get("date"));
-    const rows =
+    const playerRows =
       (await queryAll<ProjectionRow>(
         env,
         "SELECT * FROM mlb_projections WHERE date = ? ORDER BY compositeScore DESC",
         [date]
       )) || [];
-    const contexts =
+    const contextRows =
       (await queryAll<ContextSummary>(
         env,
         "SELECT date, game_id, away_team, away_team_id, home_team, home_team_id, weather_desc, temp, wind, park_name, park_factor, umpire_name, run_environment, bullpen_edge, confidence FROM mlb_game_context WHERE date = ? ORDER BY confidence DESC",
         [date]
       )) || [];
-    const playerSource = rows.length > 0 ? "db" : "mock";
-    const contextSource = contexts.length > 0 ? "db" : "mock";
-    const playerRows = rows.length > 0 ? rows : getMockSlate(date);
-    const contextRows = contexts.length > 0 ? contexts : getMockGameContexts(date);
-
     const batters = playerRows.filter((row) => row.type === "batter");
     const grouped = new Map<string, TeamSummary>();
 
@@ -85,7 +79,7 @@ export async function handleSimRequest(request: Request, env: Env): Promise<Resp
       expected_hits: round(team.expected_hits, 2),
       expected_total_bases: round(team.expected_total_bases, 2),
       expected_runs: round(team.expected_runs, 2),
-      average_confidence: round(team.average_confidence / 3, 1)
+      average_confidence: round(team.average_confidence / Math.max(1, batters.filter((row) => row.game_id === team.game_id && row.team_id === team.team_id).length), 1)
     }));
 
     const games = contextRows.map((context) => {
@@ -107,21 +101,24 @@ export async function handleSimRequest(request: Request, env: Env): Promise<Resp
         teams,
         games,
         slate: {
-          average_confidence: round(playerRows.reduce((total, row) => total + row.compositeScore, 0) / playerRows.length, 2),
+          average_confidence:
+            playerRows.length > 0
+              ? round(playerRows.reduce((total, row) => total + row.compositeScore, 0) / playerRows.length, 2)
+              : 0,
           top_batters: batters.slice(0, 5),
           top_pitchers: playerRows.filter((row) => row.type === "pitcher").slice(0, 4)
         }
       },
       {
         route: "/sim/mlb",
-        source: playerSource === "db" && contextSource === "db" ? "db" : playerSource === "db" || contextSource === "db" ? "db_partial" : "mock",
+        source: playerRows.length > 0 && contextRows.length > 0 ? "db" : playerRows.length > 0 || contextRows.length > 0 ? "db_partial" : "empty",
         tables: ["mlb_projections", "mlb_game_context"],
         notes:
-          playerSource === "db" && contextSource === "db"
+          playerRows.length > 0 && contextRows.length > 0
             ? "Projection and game-context summaries both resolved from D1."
-            : playerSource === "db" || contextSource === "db"
-              ? `Mixed source response: projections from ${playerSource}, game context from ${contextSource}.`
-              : "Projection and game-context summaries both used seeded mock data."
+            : playerRows.length > 0 || contextRows.length > 0
+              ? "Only part of the simulation package was available from D1."
+              : "No persisted simulation or game-context rows were available for the selected date."
       },
       200,
       env

@@ -792,7 +792,7 @@ export function LandingPage({ data, selectedDate }) {
             <div className="landing-brand-copy">
               <span className="mini-label">SportsSenseAi identity</span>
               <strong>One brand across the board, matchup, player, props, and live workflows.</strong>
-              <p>Built for a dark, high-trust, premium feel that supports a real subscription product instead of an internal mockup.</p>
+              <p>Built for a dark, high-trust, premium feel that reads like a real subscription product instead of a prototype.</p>
             </div>
           </article>
 
@@ -807,7 +807,7 @@ export function LandingPage({ data, selectedDate }) {
             <div className="landing-summary-grid">
               <div className="info-pair">
                 <span>Top edge</span>
-                <strong>{topEdge ? `${topEdge.player_name} ${fmtSignedPercent(topEdge.edge)}` : "Waiting on market rows"}</strong>
+                <strong>{topEdge ? `${topEdge.player_name} ${fmtSignedPercent(topEdge.edge)}` : "No real market rows yet"}</strong>
               </div>
               <div className="info-pair">
                 <span>Stake posture</span>
@@ -815,7 +815,7 @@ export function LandingPage({ data, selectedDate }) {
               </div>
               <div className="info-pair">
                 <span>Top model signal</span>
-                <strong>{topBatter ? `${topBatter.player_name} ${fmtPercent(topBatter.P_hrh_2p)}` : "Model syncing"}</strong>
+                <strong>{topBatter ? `${topBatter.player_name} ${fmtPercent(topBatter.P_hrh_2p)}` : "Projection layer not populated"}</strong>
               </div>
               <div className="info-pair">
                 <span>Book source</span>
@@ -980,62 +980,74 @@ export function CommandCenterPage({ data, selectedDate }) {
   return (
     <div className="page-shell">
       <div className="metric-grid">
-        <MetricCard label="Top batter" value={topBatter ? topBatter.player_name : "Loading"} note={topBatter ? fmtPercent(topBatter.P_hrh_2p) : "Waiting for slate"} />
-        <MetricCard label="Top pitcher" value={topPitcher ? topPitcher.player_name : "Loading"} note={topPitcher ? `${fmtDecimal(topPitcher.k_proj)} K proj` : "Waiting for slate"} />
-        <MetricCard label="Largest edge" value={topEdge ? fmtSignedPercent(topEdge.edge) : "Loading"} note={topEdge ? `${topEdge.player_name} ${topEdge.prop_type}` : "Waiting for markets"} />
-        <MetricCard label="Stake cap" value={topRisk ? `$${Math.round(topRisk.capped_stake)}` : "Loading"} note={topRisk ? `${topRisk.player_name} recommendation` : "Waiting for risk"} />
+        <MetricCard label="Top batter" value={topBatter ? topBatter.player_name : "Unavailable"} note={topBatter ? fmtPercent(topBatter.P_hrh_2p) : "No persisted projection rows"} />
+        <MetricCard label="Top pitcher" value={topPitcher ? topPitcher.player_name : "Unavailable"} note={topPitcher ? `${fmtDecimal(topPitcher.k_proj)} K proj` : "No persisted projection rows"} />
+        <MetricCard label="Largest edge" value={topEdge ? fmtSignedPercent(topEdge.edge) : "Unavailable"} note={topEdge ? `${topEdge.player_name} ${topEdge.prop_type}` : "No persisted market rows"} />
+        <MetricCard label="Stake cap" value={topRisk ? `$${Math.round(topRisk.capped_stake)}` : "Unavailable"} note={topRisk ? `${topRisk.player_name} recommendation` : "No persisted risk rows"} />
       </div>
 
       <div className="two-column">
         <PagePanel eyebrow="Slate shape" title="Projected Game Totals" description="Projected totals and environment pressure across the current MLB board.">
-          {renderChart(
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={gameOutlook}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="matchup" tickLine={false} axisLine={false} />
-                <YAxis yAxisId="left" tickLine={false} axisLine={false} />
-                <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Bar yAxisId="left" dataKey="projected_total" fill="#004A99" radius={[10, 10, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="run_environment" stroke="#CD2026" strokeWidth={3} dot={{ r: 4 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
+          {gameOutlook.length > 0 ? (
+            renderChart(
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={gameOutlook}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="matchup" tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Bar yAxisId="left" dataKey="projected_total" fill="#004A99" radius={[10, 10, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="run_environment" stroke="#CD2026" strokeWidth={3} dot={{ r: 4 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )
+          ) : (
+            <EmptyState>No persisted game projections are available yet.</EmptyState>
           )}
         </PagePanel>
 
         <PagePanel eyebrow="Model health" title="Calibration Track" description="Projected versus actual outcome rate across the HRH bucket curve.">
-          {renderChart(
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={calibrationSeries}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="bucket" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="projected" stroke="#004A99" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="actual" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
+          {calibrationSeries.length > 0 ? (
+            renderChart(
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={calibrationSeries}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="bucket" tickLine={false} axisLine={false} />
+                  <YAxis tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="projected" stroke="#004A99" strokeWidth={3} dot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="actual" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )
+          ) : (
+            <EmptyState>No calibration rows are available yet.</EmptyState>
           )}
         </PagePanel>
       </div>
 
       <div className="two-column">
         <PagePanel eyebrow="Opportunity board" title="Top Edge Distribution" description="Highest positive-edge positions currently available through the market engine.">
-          {renderChart(
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={edgeDistribution} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" horizontal={false} />
-                <XAxis type="number" tickLine={false} axisLine={false} />
-                <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={110} />
-                <Tooltip />
-                <Bar dataKey="edge" radius={[0, 10, 10, 0]}>
-                  {edgeDistribution.map((entry, index) => (
-                    <Cell key={entry.label} fill={chartColors[index % chartColors.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          {edgeDistribution.length > 0 ? (
+            renderChart(
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={edgeDistribution} layout="vertical" margin={{ left: 10, right: 10 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" horizontal={false} />
+                  <XAxis type="number" tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={110} />
+                  <Tooltip />
+                  <Bar dataKey="edge" radius={[0, 10, 10, 0]}>
+                    {edgeDistribution.map((entry, index) => (
+                      <Cell key={entry.label} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )
+          ) : (
+            <EmptyState>No persisted edge rows are available yet.</EmptyState>
           )}
         </PagePanel>
 
@@ -2650,32 +2662,36 @@ export function LineupsPage({ data }) {
   return (
     <div className="page-shell">
       <PagePanel eyebrow="Lineup intelligence" title="Batting Order Rooms" description="Confirmed orders, injury watch, and team-level presentation for the public slate.">
-        <div className="lineup-grid">
-          {Object.entries(groupedLineups).map(([team, rows]) => (
-            <article key={team} className="lineup-card">
-              <div className="lineup-header">
-                <TeamMark team={team} />
-              </div>
-              <div className="list-stack">
-                {rows
-                  .slice()
-                  .sort((a, b) => Number(a.batting_order || 0) - Number(b.batting_order || 0))
-                  .map((row) => (
-                    <div key={`${row.team}-${row.player_id}`} className="lineup-row">
-                      <div className="lineup-row-meta">
-                        <span className="lineup-order">{row.batting_order}</span>
-                        <div>
-                          <strong>{row.player_name}</strong>
-                          <small className="lineup-subcopy">Game {row.game_id}</small>
+        {Object.keys(groupedLineups).length > 0 ? (
+          <div className="lineup-grid">
+            {Object.entries(groupedLineups).map(([team, rows]) => (
+              <article key={team} className="lineup-card">
+                <div className="lineup-header">
+                  <TeamMark team={team} />
+                </div>
+                <div className="list-stack">
+                  {rows
+                    .slice()
+                    .sort((a, b) => Number(a.batting_order || 0) - Number(b.batting_order || 0))
+                    .map((row) => (
+                      <div key={`${row.team}-${row.player_id}`} className="lineup-row">
+                        <div className="lineup-row-meta">
+                          <span className="lineup-order">{row.batting_order}</span>
+                          <div>
+                            <strong>{row.player_name}</strong>
+                            <small className="lineup-subcopy">Game {row.game_id}</small>
+                          </div>
                         </div>
+                        <div className="lineup-status">{row.status || "Projected"}</div>
                       </div>
-                      <div className="lineup-status">{row.status || "Projected"}</div>
-                    </div>
-                  ))}
-              </div>
-            </article>
-          ))}
-        </div>
+                    ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState>No real lineup rows are available for the selected date yet.</EmptyState>
+        )}
       </PagePanel>
 
       <div className="two-column">
@@ -2701,19 +2717,23 @@ export function LineupsPage({ data }) {
         </PagePanel>
 
         <PagePanel eyebrow="Readiness" title="Slate Context Snapshot" description="Quick game-level context next to the lineup stack so the page feels operational, not bare.">
-          <div className="list-stack">
-            {(data.contexts || []).map((context) => (
-              <div key={context.game_id} className="detail-card">
-                <span className="detail-label">
-                  {context.away_team} at {context.home_team}
-                </span>
-                <strong>{context.park_name}</strong>
-                <p>
-                  {context.weather_desc} | Run env {fmtDecimal(context.run_environment)} | Confidence {fmtDecimal(context.confidence)}%
-                </p>
-              </div>
-            ))}
-          </div>
+          {(data.contexts || []).length > 0 ? (
+            <div className="list-stack">
+              {(data.contexts || []).map((context) => (
+                <div key={context.game_id} className="detail-card">
+                  <span className="detail-label">
+                    {context.away_team} at {context.home_team}
+                  </span>
+                  <strong>{context.park_name}</strong>
+                  <p>
+                    {context.weather_desc} | Run env {fmtDecimal(context.run_environment)} | Confidence {fmtDecimal(context.confidence)}%
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState>No persisted game-context rows are available yet.</EmptyState>
+          )}
         </PagePanel>
       </div>
     </div>

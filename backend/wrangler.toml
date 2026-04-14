@@ -15,7 +15,6 @@ SSA_BILLING_BYPASS = "true"
 SSA_CF_AIG_BYOK_ALIAS = ""
 SSA_DEFAULT_BANKROLL = "1000"
 SSA_DEFAULT_REGION = "us"
-SSA_FEATURE_MOCK_MODE = "true"
 
 # Replace these placeholder identifiers before deploying.
 [[d1_databases]]
@@ -45,7 +44,6 @@ SSA_BILLING_BYPASS = "true"
 SSA_CF_AIG_BYOK_ALIAS = ""
 SSA_DEFAULT_BANKROLL = "1000"
 SSA_DEFAULT_REGION = "us"
-SSA_FEATURE_MOCK_MODE = "true"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -77,7 +75,6 @@ SSA_BILLING_BYPASS = "true"
 SSA_CF_AIG_BYOK_ALIAS = ""
 SSA_DEFAULT_BANKROLL = "1000"
 SSA_DEFAULT_REGION = "us"
-SSA_FEATURE_MOCK_MODE = "true"
 
 [[env.production.d1_databases]]
 binding = "DB"

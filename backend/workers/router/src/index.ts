@@ -2,7 +2,6 @@ import OpenAI from "openai";
 import { execute, queryAll, queryFirst } from "../../shared/db";
 import { getDataHealthSnapshot } from "../../shared/dataContracts";
 import { hashPassword, requireToken, signToken } from "../../shared/auth";
-import { getMockCalibration, getMockSlate } from "../../shared/mockData";
 import type { CalibrationRow, Env } from "../../shared/types";
 import { handleAutoBetRequest } from "../../mlb-autobet/src/index";
 import { handleGameContextRequest, MLB_LIVE_SYNC_PROFILE, syncMlbLiveGames } from "../../mlb-game-context/src/index";
@@ -15,6 +14,18 @@ import { handleRiskEngineRequest } from "../../mlb-risk-engine/src/index";
 import { handleScheduleRequest, syncMlbScoreboardOdds } from "../../mlb-schedule/src/index";
 import { handleSimRequest } from "../../mlb-sim/src/index";
 import { handleOptions, json, notFound, parseDate, withError } from "../../shared/utils";
+
+async function buildAiFallbackSlate(env: Env, date: string): Promise<string> {
+  const scoreboard = await syncMlbScoreboardOdds(env, date, { liveOpsOnly: true }).catch(() => null);
+  if (!scoreboard || scoreboard.discoveredGames.length === 0) {
+    return "No live MLB schedule context is available right now.";
+  }
+
+  return scoreboard.discoveredGames
+    .slice(0, 3)
+    .map((game) => `${game.teams.away.abbreviation} @ ${game.teams.home.abbreviation}: ${game.status} ${game.summary || ""}`.trim())
+    .join("; ");
+}
 
 function isBillingBypassed(env: Env): boolean {
   return (env.SSA_BILLING_BYPASS || "").toLowerCase() === "true";
@@ -161,16 +172,12 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
 
   const { question } = (await request.json()) as { question: string };
   const date = parseDate(new URL(request.url).searchParams.get("date"));
-  const slate = getMockSlate(date)
-    .filter((row) => row.type === "batter")
-    .slice(0, 3)
-    .map((row) => `${row.player_name}: HRH 2+ ${Math.round(row.P_hrh_2p * 100)}%, score ${row.compositeScore}`)
-    .join("; ");
+  const slate = await buildAiFallbackSlate(env, date);
 
   if (!env.CF_AIG_TOKEN) {
     return json(
       {
-        answer: `SportsSenseAi Q&A is in safe fallback mode. Top model signals for ${date}: ${slate}. Question received: ${question}`
+        answer: `SportsSenseAi Q&A is in safe fallback mode. Live slate context for ${date}: ${slate}. Question received: ${question}`
       },
       200,
       env
@@ -209,7 +216,7 @@ async function handleAiGateway(request: Request, env: Env): Promise<Response> {
     const message = error instanceof Error ? error.message : "Unknown AI Gateway error";
     return json(
       {
-        answer: `SportsSenseAi Q&A is temporarily using fallback mode. Top model signals for ${date}: ${slate}. Question received: ${question}`,
+        answer: `SportsSenseAi Q&A is temporarily using fallback mode. Live slate context for ${date}: ${slate}. Question received: ${question}`,
         warning: message
       },
       200,
@@ -334,7 +341,7 @@ export default {
           (await queryFirst<CalibrationRow>(
             env,
             "SELECT date, prop_type, bucket, proj_avg, actual_avg, count FROM mlb_calibration ORDER BY date DESC LIMIT 1"
-          )) || getMockCalibration(parseDate(url.searchParams.get("date")))[0];
+          )) || null;
 
         return json(
           {

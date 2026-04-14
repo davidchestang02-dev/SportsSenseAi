@@ -1,4 +1,5 @@
 import { execute, queryAll, queryFirst } from "../../shared/db";
+import { syncRotowireSlateSupport } from "../../shared/rotowireLineups";
 import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type {
   Env,
@@ -604,7 +605,7 @@ async function buildWeatherGames(env: Env, date: string, refresh: boolean): Prom
        WHERE date = ?`,
       [date]
     )) || [];
-  const weatherRows =
+  let weatherRows =
     (await queryAll<{
       game_id: string;
       temp: number | null;
@@ -620,14 +621,31 @@ async function buildWeatherGames(env: Env, date: string, refresh: boolean): Prom
        WHERE date = ?`,
       [date]
     )) || [];
+  let rotowireSupport = null;
+  if (refresh || weatherRows.length === 0) {
+    rotowireSupport = await syncRotowireSlateSupport(env, date, games).catch(() => null);
+    if (rotowireSupport && rotowireSupport.weatherRows.length > 0) {
+      weatherRows = rotowireSupport.weatherRows.map((row) => ({
+        game_id: row.gameId,
+        temp: row.temp,
+        humidity: null,
+        wind_speed: row.windSpeed,
+        wind_dir: row.windDir,
+        hr_boost: null,
+        run_boost: null
+      }));
+    }
+  }
   const contextByGame = new Map(contexts.map((row) => [row.game_id, row]));
   const weatherByGame = new Map(weatherRows.map((row) => [row.game_id, row]));
+  const rotowireWeatherByGame = new Map((rotowireSupport?.weatherRows || []).map((row) => [row.gameId, row]));
 
   return games.map((game) => {
     const context = contextByGame.get(game.gameId) || null;
     const weather = weatherByGame.get(game.gameId) || null;
+    const rotowireWeather = rotowireWeatherByGame.get(game.gameId) || null;
     const wind = weather?.wind_speed ?? context?.wind ?? null;
-    const desc = context?.weather_desc || null;
+    const desc = context?.weather_desc || rotowireWeather?.conditions || null;
     const stoplight =
       String(desc || "").toLowerCase().includes("storm") ? "red"
       : String(desc || "").toLowerCase().includes("rain") ? "orange"
@@ -642,8 +660,8 @@ async function buildWeatherGames(env: Env, date: string, refresh: boolean): Prom
       city: game.venue.city,
       state: game.venue.state,
       firstPitchLocal: game.startTime,
-      isDome: false,
-      roofStatus: "unknown",
+      isDome: Boolean(rotowireWeather?.isDome),
+      roofStatus: rotowireWeather?.isDome ? "closed" : "unknown",
       stoplight,
       environment: {
         runEnvIndex: context?.run_environment ?? weather?.run_boost ?? null,
@@ -658,9 +676,13 @@ async function buildWeatherGames(env: Env, date: string, refresh: boolean): Prom
           conditions: desc,
           windSpeed: wind,
           windDirDeg: weather?.wind_dir ?? null,
-          precipProb: null,
+          precipProb: rotowireWeather?.precipProb ?? null,
           cloudCover: weather?.humidity ?? null,
-          source: weather ? "mlb_weather" : "mlb_game_context"
+          source: weather
+            ? rotowireSupport?.weatherRows.some((entry) => entry.gameId === game.gameId)
+              ? "rotowire_daily_lineups"
+              : "mlb_weather"
+            : "mlb_game_context"
         }
       ]
     };
@@ -685,7 +707,7 @@ export async function handlePregameRequest(request: Request, env: Env): Promise<
         { date, games },
         {
           route: path === "/admin/mlb/pregame-sync" ? path : "/pregame/mlb",
-          source: refresh ? "external_plus_db" : "db_or_mock",
+          source: "external_plus_db",
           tables: ["mlb_pregame_games", "mlb_pregame_teams", "mlb_pregame_venues"],
           notes:
             path === "/admin/mlb/pregame-sync"

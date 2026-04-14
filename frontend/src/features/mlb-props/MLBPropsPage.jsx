@@ -2,7 +2,7 @@ import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 
 
 import { getPlayerHeadshotCandidates, playerInitials } from "../../media";
 import { useGamePreview, usePitcherProfile, usePregameSlate, useWeather } from "../../researchData";
-import { buildMlbPropsGames, SPORTSBOOKS } from "./mockData";
+import { buildMlbPropsGames, SPORTSBOOKS } from "./propsDataAdapter";
 import styles from "./MLBPropsPage.module.css";
 
 const LEAGUE_TABS = ["MLB", "NBA", "NHL", "NFL"];
@@ -185,12 +185,6 @@ function bookCellText(book, prop) {
   return `${over} / ${under}`;
 }
 
-function createFallbackPitchMix(prop) {
-  return prop?.propType === "K"
-    ? { FF: 43, SL: 24, CH: 17, CU: 16 }
-    : { FF: 48, SL: 21, CH: 14, SI: 17 };
-}
-
 function selectedPitcherSide(game, prop) {
   const homePitcherId = Number(game?.probablePitchers?.home?.id || 0);
   const awayPitcherId = Number(game?.probablePitchers?.away?.id || 0);
@@ -245,13 +239,20 @@ function mergePitcherCardData(game, prop, previewPayload, pitcherProfile) {
     kPct: previewPitcher?.kPct ?? profilePitcher?.model?.kPct ?? null,
     bbPct: previewPitcher?.bbPct ?? profilePitcher?.model?.bbPct ?? null,
     hr9: profilePitcher?.hr9 ?? null,
-    pitchMix: previewPitcher?.pitchMix || createFallbackPitchMix(prop),
+    pitchMix: previewPitcher?.pitchMix || {},
     splits
   };
 }
 
 function buildFilteredGames(games, filters) {
   return games
+    .filter((game) => {
+      if (filters.team === "ALL") {
+        return true;
+      }
+
+      return game.awayTeam.abbr === filters.team || game.homeTeam.abbr === filters.team;
+    })
     .map((game) => ({
       ...game,
       props: (game.props || []).filter((prop) => {
@@ -267,7 +268,10 @@ function buildFilteredGames(games, filters) {
         return true;
       })
     }))
-    .filter((game) => game.props.length > 0);
+    .filter((game) => {
+      const hasPlayerLevelFilter = Boolean(filters.search) || filters.propType !== "ALL";
+      return hasPlayerLevelFilter ? game.props.length > 0 : true;
+    });
 }
 
 function booksSummary(selectedBooks) {
@@ -728,20 +732,28 @@ export function PlayerPropTable({ game, props, selectedBooks, selectedPropKey, o
           </tr>
         </thead>
         <tbody>
-          {props.map((prop, index) => {
-            const propKey = `${game.gamePk}-${prop.playerId}-${prop.propType}`;
-            return (
-              <PlayerPropRow
-                key={propKey}
-                game={game}
-                index={index}
-                prop={prop}
-                selectedBooks={selectedBooks}
-                isSelected={selectedPropKey === propKey}
-                onSelect={() => onSelectProp(prop)}
-              />
-            );
-          })}
+          {props.length > 0 ? (
+            props.map((prop, index) => {
+              const propKey = `${game.gamePk}-${prop.playerId}-${prop.propType}`;
+              return (
+                <PlayerPropRow
+                  key={propKey}
+                  game={game}
+                  index={index}
+                  prop={prop}
+                  selectedBooks={selectedBooks}
+                  isSelected={selectedPropKey === propKey}
+                  onSelect={() => onSelectProp(prop)}
+                />
+              );
+            })
+          ) : (
+            <tr>
+              <td className={styles.emptyTableCell} colSpan={selectedBooks.length + 4}>
+                No real player-prop rows are available for this matchup yet. Slate, lineup, weather, and pitcher context remain live.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -1257,6 +1269,7 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
   }
 
   const loading = data?.loading || pregame.loading || weather.loading;
+  const hasAnyProps = filteredGames.some((game) => (game.props || []).length > 0);
 
   return (
     <div className={styles.propsPage}>
@@ -1282,6 +1295,11 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
 
       {data?.error ? <div className={styles.inlineWarning}>Primary bundle warning: {data.error}</div> : null}
       {preview.error ? <div className={styles.inlineWarning}>Preview warning: {preview.error}</div> : null}
+      {!loading && filteredGames.length > 0 && !hasAnyProps ? (
+        <div className={styles.inlineWarning}>
+          SportsSenseAi is showing the real MLB slate, but the player-prop catalog for this date has not been populated by our own pipeline yet.
+        </div>
+      ) : null}
 
       <div className={styles.contentGrid}>
         <div className={styles.leftColumn}>
@@ -1316,8 +1334,8 @@ export function MLBPropsPage({ data, selectedDate, setSelectedDate }) {
             ))
           ) : (
             <section className={styles.emptyPanel}>
-              <strong>No props matched the current filters.</strong>
-              <p>Reset the filters or widen the sportsbook selection to reopen the board.</p>
+              <strong>No real games or prop rows matched the current selection.</strong>
+              <p>Reset the filters or pick a different date to reopen the live MLB board.</p>
             </section>
           )}
         </div>

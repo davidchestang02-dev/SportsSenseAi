@@ -3,7 +3,7 @@
 This audit is the current route-to-source map for the public MLB product. It is meant to answer two questions clearly:
 
 1. Which routes are truly backed by D1 or live external feeds?
-2. Which routes still degrade to seeded mock logic and therefore need pipeline work next?
+2. Which routes are still empty because their persistence layers have not been populated yet?
 
 ## Verification Rules
 
@@ -15,31 +15,31 @@ This audit is the current route-to-source map for the public MLB product. It is 
 
 | Route | Worker | Source Mode | Tables | Current State |
 | --- | --- | --- | --- | --- |
-| `/health` | `router` | `db_or_mock` | `mlb_calibration` | Partial |
+| `/health` | `router` | `db_only` | `mlb_calibration` | Partial |
 | `/project/mlb` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
 | `/schedule/mlb` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
 | `/pregame/mlb` | `mlb-pregame` | `external_plus_db` | `mlb_pregame_games`, `mlb_pregame_teams`, `mlb_pregame_venues` | Verified |
-| `/weather/mlb` | `mlb-pregame` | `db_only` | `mlb_pregame_games`, `mlb_weather`, `mlb_game_context`, `mlb_statcast_previews` | Verified |
-| `/pitchers/mlb` | `mlb-pitchers` | `db_only` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
+| `/weather/mlb` | `mlb-pregame` | `external_plus_db` | `mlb_pregame_games`, `mlb_weather`, `mlb_game_context`, `mlb_statcast_previews` | Partial |
+| `/pitchers/mlb` | `mlb-pitchers` | `external_plus_db` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Partial |
 | `/pitchers/mlb/:playerId` | `mlb-pitchers` | `db_only` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
 | `/pitchers/mlb/:playerId/splits` | `mlb-pitchers` | `db_only` | `mlb_pitcher_stats`, `mlb_pitcher_splits` | Verified |
 | `/games/mlb/:gameId` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
-| `/games/mlb/:gameId/preview` | `mlb-pregame` | `db_only` | `mlb_pregame_games`, `mlb_statcast_previews`, `mlb_game_context`, `mlb_weather` | Verified |
+| `/games/mlb/:gameId/preview` | `mlb-pregame` | `external_plus_db` | `mlb_pregame_games`, `mlb_statcast_previews`, `mlb_game_context`, `mlb_weather` | Partial |
 | `/games/mlb/:gameId/odds` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
 | `/games/mlb/:gameId/odds/history` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
 | `/games/mlb/:gameId/odds/movement` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
 | `/games/mlb/:gameId/gamecast` | `mlb-game-context` | `external_plus_db` | `mlb_gamecast_state`, `mlb_gamecast_plays`, `mlb_game_odds_books`, `mlb_live` | Verified |
 | `/games/mlb/:gameId/streams` | `mlb-schedule` | `external_plus_db` | `mlb_odds`, `mlb_odds_history`, `mlb_game_odds_books`, `mlb_game_odds_books_history` | Verified |
-| `/sim/mlb` | `mlb-sim` | `db_or_mock` | `mlb_projections`, `mlb_game_context` | Partial |
-| `/market/mlb` | `mlb-market-maker` | `db_or_mock` | `mlb_market_views` | Partial |
+| `/sim/mlb` | `mlb-sim` | `db_only` | `mlb_projections`, `mlb_game_context` | Partial |
+| `/market/mlb` | `mlb-market-maker` | `db_only` | `mlb_market_views` | Partial |
 | `/risk/mlb` | `mlb-risk-engine` | `db_only` | `mlb_market_views`, `mlb_risk_runs` | Partial |
 | `/autobet/mlb` | `mlb-autobet` | `db_only` | `mlb_market_views`, `mlb_autobet_runs` | Partial |
-| `/lineups/mlb` | `mlb-lineups` | `db_or_mock` | `mlb_lineups`, `mlb_injuries` | Partial |
-| `/game/mlb/:gameId` | `mlb-game-context` | `db_or_mock` | `mlb_projections` | Partial |
-| `/player/mlb/:playerId` | `mlb-game-context` | `db_or_mock` | `mlb_projections` | Partial |
-| `/live/mlb` | `mlb-game-context` | `db_or_mock` | `mlb_live`, `mlb_gamecast_state`, `mlb_game_odds_books` | Partial |
-| `/game-context/mlb` | `mlb-game-context` | `db_or_mock` | `mlb_game_context` | Partial |
-| `/admin/mlb/health-data` | `mlb-game-context` | `db_or_mock` | `mlb_calibration` | Partial |
+| `/lineups/mlb` | `mlb-lineups` | `external_plus_db` | `mlb_lineups`, `mlb_injuries` | Partial |
+| `/game/mlb/:gameId` | `mlb-game-context` | `db_only` | `mlb_projections` | Partial |
+| `/player/mlb/:playerId` | `mlb-game-context` | `db_only` | `mlb_projections` | Partial |
+| `/live/mlb` | `mlb-game-context` | `external_plus_db` | `mlb_live`, `mlb_gamecast_state`, `mlb_game_odds_books` | Partial |
+| `/game-context/mlb` | `mlb-game-context` | `db_only` | `mlb_game_context` | Partial |
+| `/admin/mlb/health-data` | `mlb-game-context` | `db_only` | `mlb_calibration` | Partial |
 | `/admin/mlb/data-health` | `router` | `db_only` | multiple | Verified |
 | `/admin/mlb/pregame-sync` | `mlb-pregame` | `external_plus_db` | `mlb_pregame_games`, `mlb_pregame_teams`, `mlb_pregame_venues` | Verified |
 | `/admin/mlb/statcast-sync` | `mlb-pregame` | `external_plus_db` | `mlb_statcast_previews`, `mlb_pregame_games` | Verified |
@@ -48,7 +48,7 @@ This audit is the current route-to-source map for the public MLB product. It is 
 | `/research/mlb/slate` | `mlb-research` | `external` | none | Verified |
 | `/research/mlb/team/:teamId` | `mlb-research` | `external` | none | Verified |
 | `/research/mlb/player/:playerId` | `mlb-research` | `external` | none | Verified |
-| `/mlb/qa` | `router` | `external_plus_mock` | none | Partial |
+| `/mlb/qa` | `router` | `external_plus_db` | none | Partial |
 
 ## Highest-Risk Gaps
 
@@ -65,7 +65,7 @@ This audit is the current route-to-source map for the public MLB product. It is 
 - `/game-context/mlb`
 - `/admin/mlb/health-data`
 
-These routes use D1 when rows exist, but they still fall back to mock output when the pipeline does not populate the required tables.
+These routes now return persisted D1 data when rows exist and otherwise return explicit empty payloads. They still need pipeline work so the product surfaces are populated, but they no longer degrade to seeded mock output.
 
 ### Newly wired and verified
 
@@ -86,7 +86,7 @@ These routes use D1 when rows exist, but they still fall back to mock output whe
 2. Populate `mlb_market_views` from real odds aggregation and market maker output.
 3. Populate `mlb_lineups`, `mlb_injuries`, and `mlb_game_context` before lock each day.
 4. Deepen `mlb_live` from summary snapshots into consistently pitch-level reads across all active games.
-5. Populate `mlb_market_views` so `risk` and `autobet` return real D1-backed recommendations instead of `db_empty`.
+5. Populate `mlb_market_views` so `risk` and `autobet` return meaningful D1-backed recommendations instead of empty ledgers.
 
 ## Live Ops Notes
 
@@ -104,5 +104,5 @@ These routes use D1 when rows exist, but they still fall back to mock output whe
 
 - `/admin/mlb/data-health` reports non-zero rows for the critical tables.
 - `ssa_debug_source=1` shows `source: "db"` for public model routes.
-- Public UI metrics read from real route outputs without any fallback-only dependency.
+- Public UI metrics read from real route outputs without any synthetic fallback dependency.
 - Customer UI contains no infrastructure wording.

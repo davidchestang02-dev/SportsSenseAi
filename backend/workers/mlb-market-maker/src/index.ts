@@ -1,5 +1,4 @@
 import { queryAll } from "../../shared/db";
-import { getMockMarkets } from "../../shared/mockData";
 import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { Env, MarketRow } from "../../shared/types";
 import { methodNotAllowed, parseDate, withError } from "../../shared/utils";
@@ -19,17 +18,14 @@ export async function handleMarketMakerRequest(request: Request, env: Env): Prom
         [date]
       )) || [];
 
-    const source = markets.length > 0 ? "db" : "mock";
-    const payload = markets.length > 0 ? markets : getMockMarkets(date);
-
     return jsonWithSourceMeta(
       request,
-      payload,
+      markets,
       {
         route: "/market/mlb",
-        source,
+        source: markets.length > 0 ? "db" : "empty",
         tables: ["mlb_market_views"],
-        notes: source === "db" ? "Market views resolved from D1." : "No market rows found in D1, so seeded markets were returned."
+        notes: markets.length > 0 ? "Market views resolved from D1." : "No market rows were available in D1 for the selected date."
       },
       200,
       env

@@ -66,7 +66,7 @@ Live-ops cadence:
 - The app mirrors that profile when open: active game schedule and live views refresh every `60` seconds, scheduled slates refresh hourly until prelock, and recent finals refresh every `2` minutes.
 - ESPN-style sub-minute play-by-play remains a future dedicated live-feed worker rather than part of the current cron path.
 
-Most modeling routes still fall back to in-repo mock data if D1 is unavailable or empty, which keeps the app launchable while infrastructure is being wired. The ESPN scoreboard routes are external and do not use the in-repo mock slate.
+Modeling routes now return persisted D1 data when available and otherwise return explicit empty payloads. The app no longer falls back to in-repo mock route data in production.
 
 Billing launch mode:
 

@@ -10,7 +10,6 @@ export interface Env {
   SSA_CF_AIG_TOKEN?: string;
   SSA_CF_AIG_BYOK_ALIAS?: string;
   SSA_DEFAULT_BANKROLL?: string;
-  SSA_FEATURE_MOCK_MODE?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
 }

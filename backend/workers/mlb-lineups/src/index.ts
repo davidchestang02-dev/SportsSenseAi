@@ -1,7 +1,8 @@
 import { queryAll } from "../../shared/db";
-import { getMockLineups } from "../../shared/mockData";
+import { syncRotowireSlateSupport } from "../../shared/rotowireLineups";
 import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type { Env, InjuryRow, LineupRow } from "../../shared/types";
+import { syncPregameSlate } from "../../mlb-pregame/src/index";
 import { methodNotAllowed, parseDate, withError } from "../../shared/utils";
 
 export async function handleLineupsRequest(request: Request, env: Env): Promise<Response> {
@@ -15,7 +16,7 @@ export async function handleLineupsRequest(request: Request, env: Env): Promise<
     const lineups =
       (await queryAll<LineupRow>(
         env,
-        "SELECT date, game_id, team_id, team, player_id, player_name, batting_order, confirmed, 'Confirmed' as status FROM mlb_lineups WHERE date = ? ORDER BY game_id, team_id, batting_order",
+        "SELECT date, game_id, team_id, team, player_id, player_name, batting_order, confirmed, CASE WHEN confirmed = 1 THEN 'Confirmed' ELSE 'Expected' END as status FROM mlb_lineups WHERE date = ? ORDER BY game_id, team_id, batting_order",
         [date]
       )) || [];
     const injuries =
@@ -40,14 +41,29 @@ export async function handleLineupsRequest(request: Request, env: Env): Promise<
       );
     }
 
+    const pregameGames = await syncPregameSlate(env, date);
+    const support = await syncRotowireSlateSupport(env, date, pregameGames);
+
     return jsonWithSourceMeta(
       request,
-      { date, ...getMockLineups(date) },
+      {
+        date,
+        lineups: support.lineups,
+        injuries: support.injuries
+      },
       {
         route: "/lineups/mlb",
-        source: "mock",
+        source: support.lineups.length > 0 || support.injuries.length > 0 ? "external_plus_db" : "empty",
         tables: ["mlb_lineups", "mlb_injuries"],
-        notes: "No lineup or injury rows found in D1, so seeded lineup data was returned."
+        notes:
+          support.lineups.length > 0 || support.injuries.length > 0
+            ? "Lineups were refreshed from RotoWire daily lineups and paired with ESPN team injuries before returning."
+            : "No live lineup or injury rows were available from D1 or the upstream fallback sources for the selected date.",
+        breakdown: {
+          lineups: support.lineups.length,
+          injuries: support.injuries.length,
+          matched_games: support.matchedGames
+        }
       },
       200,
       env

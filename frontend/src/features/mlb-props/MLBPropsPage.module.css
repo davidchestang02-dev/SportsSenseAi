@@ -438,6 +438,13 @@
   text-transform: uppercase;
 }
 
+.emptyTableCell {
+  padding: 1rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .rowMain {
   cursor: pointer;
   transition: background 160ms ease;

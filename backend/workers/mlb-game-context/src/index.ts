@@ -1,5 +1,4 @@
 import { queryAll, queryFirst } from "../../shared/db";
-import { getMockCalibration, getMockGameContexts, getMockLive, getMockSlate } from "../../shared/mockData";
 import { jsonWithSourceMeta } from "../../shared/sourceMeta";
 import type {
   CalibrationRow,
@@ -457,6 +456,38 @@ async function insertLiveSnapshot(env: Env, snapshot: LiveSyncSnapshot): Promise
   return Boolean(result.success);
 }
 
+async function resolveLiveGameId(env: Env, date: string, requestedGameId: string | null, refresh: boolean): Promise<string | null> {
+  if (requestedGameId) {
+    return requestedGameId;
+  }
+
+  if (refresh) {
+    const scoreboardSync = await syncMlbScoreboardOdds(env, date, { liveOpsOnly: true }).catch(() => null);
+    const liveGame = scoreboardSync?.games.find((game) => game.status === "IN_PROGRESS");
+    if (liveGame?.gameId) {
+      return liveGame.gameId;
+    }
+  }
+
+  const storedGamecast =
+    (await queryFirst<{ game_id: string }>(
+      env,
+      "SELECT game_id FROM mlb_gamecast_state WHERE date = ? ORDER BY updated_at DESC LIMIT 1",
+      [date]
+    )) || null;
+  if (storedGamecast?.game_id) {
+    return storedGamecast.game_id;
+  }
+
+  const storedLive =
+    (await queryFirst<{ game_id: string }>(
+      env,
+      "SELECT game_id FROM mlb_live ORDER BY created_at DESC LIMIT 1"
+    )) || null;
+
+  return storedLive?.game_id || null;
+}
+
 export async function syncMlbLiveGames(env: Env, gameIds: string[]) {
   const uniqueGameIds = [...new Set(gameIds.filter(Boolean))];
   const games = await Promise.all(
@@ -611,15 +642,14 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
           "SELECT * FROM mlb_projections WHERE game_id = ? ORDER BY type, compositeScore DESC",
           [gameId]
         )) || [];
-      const source = rows.length > 0 ? "db" : "mock";
       return jsonWithSourceMeta(
         request,
-        rows.length > 0 ? rows : getMockSlate(date).filter((row) => row.game_id === gameId),
+        rows,
         {
           route: "/game/mlb/:gameId",
-          source,
+          source: rows.length > 0 ? "db" : "empty",
           tables: ["mlb_projections"],
-          notes: source === "db" ? "Game projection rows resolved from D1." : "Returned seeded game rows."
+          notes: rows.length > 0 ? "Game projection rows resolved from D1." : "No persisted game projection rows were available for this game."
         },
         200,
         env
@@ -634,15 +664,14 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
           "SELECT * FROM mlb_projections WHERE player_id = ? ORDER BY date DESC LIMIT 1",
           [playerId]
         )) || null;
-      const source = row ? "db" : "mock";
       return jsonWithSourceMeta(
         request,
-        row || getMockSlate(date).find((item) => item.player_id === playerId) || null,
+        row,
         {
           route: "/player/mlb/:playerId",
-          source,
+          source: row ? "db" : "empty",
           tables: ["mlb_projections"],
-          notes: source === "db" ? "Latest player projection resolved from D1." : "Returned seeded player row."
+          notes: row ? "Latest player projection resolved from D1." : "No persisted player projection row was available for this player."
         },
         200,
         env
@@ -650,8 +679,34 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
     }
 
     if (path.startsWith("/live/mlb")) {
-      const gameId = url.searchParams.get("game_id") || "401700001";
+      const requestedGameId = url.searchParams.get("game_id");
       const refresh = url.searchParams.get("refresh") === "1";
+      const gameId = await resolveLiveGameId(env, date, requestedGameId, refresh);
+      if (!gameId) {
+        return jsonWithSourceMeta(
+          request,
+          {
+            game_id: null,
+            snapshot: null,
+            recent_events: [],
+            pitch_type_mix: [],
+            gamecast: null,
+            polling: MLB_LIVE_SYNC_PROFILE,
+            sync: null
+          },
+          {
+            route: "/live/mlb",
+            source: "empty",
+            tables: ["mlb_live", "mlb_gamecast_state", "mlb_gamecast_plays"],
+            notes: "No live or recently tracked game could be resolved for the selected date.",
+            breakdown: {
+              refreshed_from_espn: refresh
+            }
+          },
+          200,
+          env
+        );
+      }
       const sync = refresh ? await syncMlbLiveGames(env, [gameId]) : null;
       const gamecast = await buildGamecast(env, gameId, date, refresh).catch(() => null);
       const snapshot =
@@ -684,12 +739,12 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
         count: item.count,
         avg_speed: Number(item.avg_speed.toFixed(1))
       }));
-      const source = snapshot || recentEvents.length > 0 ? (refresh ? "external_plus_db" : "db") : "mock";
+      const source = snapshot || recentEvents.length > 0 || gamecast ? (refresh ? "external_plus_db" : "db") : "empty";
       return jsonWithSourceMeta(
         request,
         {
           game_id: gameId,
-          snapshot: snapshot || getMockLive(gameId),
+          snapshot,
           recent_events: recentEvents,
           pitch_type_mix: pitchTypeMix,
           gamecast,
@@ -705,7 +760,7 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
               ? "Live snapshot was refreshed from ESPN summary, persisted into D1, and paired with a richer normalized Gamecast object."
               : source === "db"
                 ? "Live snapshot and recent pitch events resolved from D1."
-                : "Returned seeded live snapshot because no D1 live events were available.",
+                : "No live snapshot or recent pitch events were available for the resolved game.",
           breakdown: {
             recent_events: recentEvents.length,
             pitch_types: pitchTypeMix.length,
@@ -724,15 +779,14 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
           env,
           "SELECT date, prop_type, bucket, proj_avg, actual_avg, count FROM mlb_calibration ORDER BY date DESC, prop_type, bucket LIMIT 100"
         )) || [];
-      const source = rows.length > 0 ? "db" : "mock";
       return jsonWithSourceMeta(
         request,
-        rows.length > 0 ? rows : getMockCalibration(date),
+        rows,
         {
           route: "/admin/mlb/health-data",
-          source,
+          source: rows.length > 0 ? "db" : "empty",
           tables: ["mlb_calibration"],
-          notes: source === "db" ? "Calibration rows resolved from D1." : "Returned seeded calibration curve."
+          notes: rows.length > 0 ? "Calibration rows resolved from D1." : "No calibration rows were available in D1."
         },
         200,
         env
@@ -746,15 +800,14 @@ export async function handleGameContextRequest(request: Request, env: Env): Prom
         [date]
       )) || [];
 
-    const source = rows.length > 0 ? "db" : "mock";
     return jsonWithSourceMeta(
       request,
-      rows.length > 0 ? rows : getMockGameContexts(date),
+      rows,
       {
         route: "/game-context/mlb",
-        source,
+        source: rows.length > 0 ? "db" : "empty",
         tables: ["mlb_game_context"],
-        notes: source === "db" ? "Game context rows resolved from D1." : "Returned seeded game context."
+        notes: rows.length > 0 ? "Game context rows resolved from D1." : "No game-context rows were available in D1 for the selected date."
       },
       200,
       env

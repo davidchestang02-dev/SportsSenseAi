@@ -3,23 +3,17 @@ import { useEffect, useState } from "react";
 import { getAutoBet, getCalibration, getDataHealth, getGameContexts, getHealth, getLineups, getLive, getMarkets, getRisk, getSchedule, getSimulation, todayIso } from "./api";
 
 const fallbackHealth = {
-  ok: true,
+  ok: false,
   app: "SportsSenseAi",
-  db_bound: true,
-  latest_calibration: {
-    date: todayIso(),
-    prop_type: "hrh_2p",
-    proj_avg: 0.3,
-    actual_avg: 0.289,
-    count: 48
-  }
+  db_bound: false,
+  latest_calibration: null
 };
 
 const initialState = {
   loading: true,
   error: "",
   health: fallbackHealth,
-  dataHealth: { routes: [], summary: { verified_routes: 0, partial_routes: 0, blocked_routes: 0, mock_only_routes: [] } },
+  dataHealth: { routes: [], summary: { verified_routes: 0, partial_routes: 0, blocked_routes: 0, empty_capable_routes: [] } },
   schedule: { date: todayIso(), games: [], ingestion: { odds_snapshots_attempted: 0, odds_snapshots_persisted: 0 } },
   simulation: { players: [], teams: [], games: [], slate: { top_batters: [], top_pitchers: [] } },
   markets: [],

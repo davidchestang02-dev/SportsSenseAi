@@ -1,7 +1,7 @@
 import { queryFirst } from "./db";
 import type { Env } from "./types";
 
-export type SourceMode = "db_only" | "db_or_mock" | "mock_only" | "external" | "external_plus_db" | "external_plus_mock";
+export type SourceMode = "db_only" | "external" | "external_plus_db" | "empty";
 
 export type VerificationStatus = "verified" | "partial" | "blocked";
 
@@ -18,10 +18,10 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
   {
     path: "/health",
     worker: "router",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_calibration"],
-    notes: "Latest calibration row comes from D1 when available, otherwise mock calibration seed."
+    notes: "Latest calibration row comes from D1 when available and otherwise returns null."
   },
   {
     path: "/project/mlb",
@@ -130,18 +130,18 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
   {
     path: "/sim/mlb",
     worker: "mlb-sim",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_projections", "mlb_game_context"],
-    notes: "Player projections and game environment should both come from D1 before mock fallback."
+    notes: "Player projections and game environment come from D1 and otherwise return empty arrays."
   },
   {
     path: "/market/mlb",
     worker: "mlb-market-maker",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_market_views"],
-    notes: "Market board is D1-backed when views exist and otherwise uses mock market output."
+    notes: "Market board is D1-backed and otherwise returns an empty market set."
   },
   {
     path: "/risk/mlb",
@@ -162,26 +162,26 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
   {
     path: "/lineups/mlb",
     worker: "mlb-lineups",
-    source_mode: "db_or_mock",
+    source_mode: "external_plus_db",
     verification_status: "partial",
     tables: ["mlb_lineups", "mlb_injuries"],
-    notes: "Lineups and injuries use D1 when available and fallback to seeded lineup data otherwise."
+    notes: "Lineups use D1 when available and otherwise refresh from RotoWire daily lineups plus ESPN team injuries."
   },
   {
     path: "/game/mlb/:gameId",
     worker: "mlb-game-context",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_projections"],
-    notes: "Game detail resolves player projection rows from D1 or uses mock slate rows."
+    notes: "Game detail resolves player projection rows from D1 and otherwise returns an empty list."
   },
   {
     path: "/player/mlb/:playerId",
     worker: "mlb-game-context",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_projections"],
-    notes: "Player detail resolves latest projection row from D1 or uses mock slate row."
+    notes: "Player detail resolves the latest projection row from D1 and otherwise returns null."
   },
   {
     path: "/live/mlb",
@@ -202,18 +202,18 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
   {
     path: "/game-context/mlb",
     worker: "mlb-game-context",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_game_context"],
-    notes: "Game context is D1-backed when available and otherwise seeded from mock context."
+    notes: "Game context is D1-backed and otherwise returns an empty list."
   },
   {
     path: "/admin/mlb/health-data",
     worker: "mlb-game-context",
-    source_mode: "db_or_mock",
+    source_mode: "db_only",
     verification_status: "partial",
     tables: ["mlb_calibration"],
-    notes: "Calibration inspection uses D1 first and mock calibration curves otherwise."
+    notes: "Calibration inspection uses D1 and otherwise returns an empty calibration set."
   },
   {
     path: "/admin/mlb/data-health",
@@ -221,7 +221,7 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
     source_mode: "db_only",
     verification_status: "verified",
     tables: ["mlb_projections", "mlb_market_views", "mlb_lineups", "mlb_injuries", "mlb_live", "mlb_game_context", "mlb_calibration"],
-    notes: "Internal verification route exposing row counts, route audit, and mock-risk summary."
+    notes: "Internal verification route exposing row counts and the current route-audit summary."
   },
   {
     path: "/admin/mlb/live-sync",
@@ -259,10 +259,10 @@ export const ROUTE_AUDIT: RouteAuditEntry[] = [
   {
     path: "/mlb/qa",
     worker: "router",
-    source_mode: "external_plus_mock",
+    source_mode: "external_plus_db",
     verification_status: "partial",
     tables: [],
-    notes: "AI calls the live model path when configured and otherwise answers from a safe mock-slate fallback."
+    notes: "AI calls the live model path when configured and otherwise answers from live schedule context."
   }
 ];
 
@@ -313,7 +313,7 @@ export async function getDataHealthSnapshot(env: Env) {
       verified_routes: ROUTE_AUDIT.filter((route) => route.verification_status === "verified").length,
       partial_routes: ROUTE_AUDIT.filter((route) => route.verification_status === "partial").length,
       blocked_routes: ROUTE_AUDIT.filter((route) => route.verification_status === "blocked").length,
-      mock_only_routes: ROUTE_AUDIT.filter((route) => route.source_mode === "mock_only").map((route) => route.path)
+      empty_capable_routes: ROUTE_AUDIT.filter((route) => route.source_mode === "empty").map((route) => route.path)
     }
   };
 }
